@@ -130,7 +130,7 @@ function getDashboard_() {
   });
   const byArea={},byModel={},sap={};let available=0,unavailable=0,noState=0;
   items.forEach(x=>{
-    const area=x.maestro.areaOperacional||'SIN ÁREA';const a=byArea[area] ||= {total:0,disponibles:0,indisponibles:0,sinEstado:0};a.total++;
+    const area=x.maestro.areaOperacional||'SIN ÁREA';const a=byArea[area]||(byArea[area]={total:0,disponibles:0,indisponibles:0,sinEstado:0});a.total++;
     const d=String(x.estadoActual&&x.estadoActual.disponibilidad||'').toUpperCase();if(d==='DISPONIBLE'){available++;a.disponibles++;}else if(d==='INDISPONIBLE'){unavailable++;a.indisponibles++;}else{noState++;a.sinEstado++;}
     const model=normalizeModel_(x.maestro.modelo||'SIN MODELO');byModel[model]=(byModel[model]||0)+1;
     const validation=x.maestro.estadoValidacionSAP||'SIN ESTADO';sap[validation]=(sap[validation]||0)+1;
