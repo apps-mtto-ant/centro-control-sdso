@@ -1,5 +1,6 @@
 import { initOfflineLayer, getLastSyncLabel } from './offline.js';
 import { initLocalDb } from './db.js';
+import { initDashboardCompresores, loadDashboardCompresores } from './dashboard-compresores.js';
 import { api } from './api.js';
 import { auth } from './auth.js';
 
@@ -10,6 +11,7 @@ const titles = Object.freeze({
   'centro-informe': 'Centro Informe',
   apps: 'Aplicaciones SDSO',
   dashboard: 'Dashboard',
+  'dashboard-compresores': 'Dashboard Compresores',
   powerbi: 'Power BI',
   informes: 'Informes / herramientas'
 });
@@ -86,13 +88,19 @@ function setDrawer(open, { restoreFocus = true } = {}) {
 function renderSection(section) {
   if (!titles[section]) section = 'inicio';
   $$('.view').forEach(view => view.classList.toggle('is-visible', view.dataset.view === section));
+  const navSection = section === 'dashboard-compresores' ? 'dashboard' : section;
   $$('.nav-item').forEach(link => {
-    const active = link.dataset.section === section;
+    const active = link.dataset.section === navSection;
     link.classList.toggle('is-active', active);
     if (active) link.setAttribute('aria-current', 'page');
     else link.removeAttribute('aria-current');
   });
   $('#pageTitle').textContent = titles[section];
+  const topbarStatus = $('.topbar-status');
+  if (topbarStatus) topbarStatus.hidden = section === 'inicio';
+  const refreshButton = $('#refreshButton');
+  if (refreshButton) refreshButton.hidden = section === 'inicio';
+  if (section === 'dashboard-compresores') void loadDashboardCompresores();
   setDrawer(false, { restoreFocus: false });
   window.scrollTo(0, 0);
   $('#content').focus({ preventScroll: true });
@@ -229,6 +237,16 @@ function decorateIcons() {
 
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
+
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloaded = false;
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    reloaded = true;
+    location.reload();
+  });
+
   try {
     await navigator.serviceWorker.register('./service-worker.js', { scope: './', updateViaCache: 'none' });
   } catch (error) {
@@ -249,8 +267,14 @@ function bindEvents() {
     updateConnectivity();
     showToast(navigator.onLine ? 'Conexión disponible' : 'No hay conexión disponible');
   });
-  window.addEventListener('online', () => { updateConnectivity(); showToast('Conexión restablecida'); });
+  window.addEventListener('online', () => {
+    updateConnectivity();
+    showToast('Conexión restablecida');
+    if (currentSectionFromHash() === 'dashboard-compresores') void loadDashboardCompresores();
+  });
   window.addEventListener('offline', () => { updateConnectivity(); showToast('Centro operando sin conexión'); });
+  window.addEventListener('sdso:sync', updateConnectivity);
+  window.addEventListener('sdso:toast', event => showToast(event.detail || 'Actualización completada'));
 
   window.addEventListener('beforeinstallprompt', event => {
     event.preventDefault();
@@ -274,6 +298,7 @@ async function boot() {
   renderCatalogs();
   bindEvents();
   initOfflineLayer();
+  initDashboardCompresores();
   updateConnectivity();
   renderSection(currentSectionFromHash());
 
@@ -283,7 +308,7 @@ async function boot() {
   // IndexedDB se inicializa en segundo plano y tiene timeout interno; nunca bloquea el arranque.
   void initLocalDb();
 
-  // Contratos preparados; v0.2 no fuerza backend ni autenticación.
+  // v0.3 integra backend real de Compresores; autorización permanece en modo LECTOR.
   void api;
   void auth;
 }

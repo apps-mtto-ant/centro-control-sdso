@@ -1,3 +1,4 @@
+/* v0.3.0 */
 importScripts('./js/config.js');
 
 const CONFIG = self.SDSO_CONFIG;
@@ -15,6 +16,7 @@ const APP_SHELL = [
   './js/config.js',
   './js/app.js',
   './js/api.js',
+  './js/dashboard-compresores.js',
   './js/offline.js',
   './js/db.js',
   './js/auth.js',
