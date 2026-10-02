@@ -16,6 +16,7 @@ const APP_SHELL = [
   './js/app.js',
   './js/api.js',
   './js/offline.js',
+  './js/db.js',
   './js/auth.js',
   './manifest.webmanifest',
   './assets/icons/icon.svg',
@@ -80,15 +81,30 @@ self.addEventListener('fetch', event => {
 
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
+      const cachedIndex = await caches.match('./index.html');
+
+      // N3: durante la ventana degradada se responde de inmediato con caché.
+      // La red vuelve a probarse al expirar la ventana de degradación.
+      if (isNetworkDegraded() && cachedIndex) return cachedIndex;
+
       try {
         const response = await fetchFresh(request, NAVIGATION_TIMEOUT_MS);
         const scope = new URL(self.registration.scope);
         const isAppEntry = response.ok && (url.pathname === scope.pathname || url.pathname === `${scope.pathname}index.html`);
-        if (isAppEntry) await putIfOk('./index.html', response);
+
+        if (response.ok) {
+          if (isAppEntry) await putIfOk('./index.html', response);
+          return response;
+        }
+
+        if (response.status >= 500 && cachedIndex) {
+          markNetworkDegraded();
+          return cachedIndex;
+        }
         return response;
       } catch {
         markNetworkDegraded();
-        return (await caches.match('./index.html')) || Response.error();
+        return cachedIndex || Response.error();
       }
     })());
     return;
@@ -97,13 +113,19 @@ self.addEventListener('fetch', event => {
   event.respondWith((async () => {
     const cached = await caches.match(request);
 
-    // Si la navegación ya detectó una red degradada, no repetimos timeouts
-    // para cada recurso del shell. Se sirve caché inmediatamente durante 30 s.
     if (isNetworkDegraded() && cached) return cached;
 
     try {
       const response = await fetchFresh(request, ASSET_TIMEOUT_MS);
-      if (response.ok) await putIfOk(request, response);
+      if (response.ok) {
+        await putIfOk(request, response);
+        return response;
+      }
+
+      if (response.status >= 500 && cached) {
+        markNetworkDegraded();
+        return cached;
+      }
       return response;
     } catch {
       markNetworkDegraded();

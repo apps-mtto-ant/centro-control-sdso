@@ -128,3 +128,32 @@ code { background: #EDF3F4; padding: 2px 5px; border-radius: 5px; color: #365058
   .topbar-actions #refreshButton { padding-inline: 10px; }
   .topbar-status .sync-meta { font-size: 9px; }
 }
+
+/* v0.2.0-dev-r3 — correcciones de auditoría PWA/offline y aislamiento staging */
+.resource-empty { grid-column: 1 / -1; }
+
+@media (max-width: 590px) {
+  .topbar {
+    padding: 10px 12px;
+    min-height: 68px;
+    gap: 8px 10px;
+  }
+  .menu-toggle { width: 38px; height: 38px; }
+  .topbar h1 { font-size: 19px; line-height: 1.1; }
+  .topbar .eyebrow { font-size: 9px; }
+  .topbar-status {
+    padding-top: 6px;
+    gap: 2px;
+  }
+  .topbar-status .sync-meta {
+    font-size: 11px;
+    line-height: 1.25;
+  }
+  .connection-badge { font-size: 11px; }
+  .topbar-actions #refreshButton {
+    min-height: 38px;
+    padding: 7px 9px;
+    font-size: 13px;
+  }
+  .content { padding-top: 16px; }
+}

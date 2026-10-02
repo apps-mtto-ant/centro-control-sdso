@@ -1,4 +1,5 @@
-const LAST_SYNC_KEY = 'sdso:lastSync';
+const CONFIG = globalThis.SDSO_CONFIG;
+const LAST_SYNC_KEY = CONFIG?.lastSyncKey || 'sdso:lastSync';
 
 function pad(value) {
   return String(value).padStart(2, '0');
@@ -27,5 +28,4 @@ export function getLastSyncLabel() {
 
 export function initOfflineLayer() {
   // No se inventa una sincronización. Solo una sincronización real de datos podrá marcarla.
-  // IndexedDB y cola offline se incorporarán en una etapa posterior.
 }
