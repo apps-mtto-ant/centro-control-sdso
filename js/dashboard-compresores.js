@@ -225,10 +225,11 @@ async function submitForm(form, method, success) {
   const msg=form.querySelector('.form-message');if(!navigator.onLine){msg.textContent='Conéctate a internet para enviar este registro.';return;}
   if(!auth.can('editar')||!auth.token){msg.textContent='Inicia sesión con una cuenta de supervisión autorizada.';return;}
   const button=form.querySelector('[type="submit"]');button.disabled=true;msg.textContent='Guardando…';
-  const data=Object.fromEntries(new FormData(form).entries());data.requestId=crypto.randomUUID();
+  const data=Object.fromEntries(new FormData(form).entries());
   if(data.fechaHora)data.fechaHora=new Date(data.fechaHora).toISOString();
   if(data.horometro)data.horometro=Number(data.horometro);
-  try{const result=await method(auth.token,data);if(!result?.ok)throw new Error(result?.error?.message||'El registro fue rechazado.');msg.textContent=success;form.reset();form.querySelectorAll('input[type="datetime-local"]').forEach(el=>el.value=localDateTime());await load(true);if(auth.signedIn)await refreshNovedades();}
+  const fingerprint=JSON.stringify(data);if(form.dataset.requestFingerprint!==fingerprint){form.dataset.requestFingerprint=fingerprint;form.dataset.requestId=crypto.randomUUID();}data.requestId=form.dataset.requestId;
+  try{const result=await method(auth.token,data);if(!result?.ok)throw new Error(result?.error?.message||'El registro fue rechazado.');delete form.dataset.requestFingerprint;delete form.dataset.requestId;msg.textContent=success;form.reset();form.querySelectorAll('input[type="datetime-local"]').forEach(el=>el.value=localDateTime());await load(true);if(auth.signedIn)await refreshNovedades();}
   catch(error){msg.textContent=error.message||'No fue posible guardar el registro.';}
   finally{button.disabled=false;}
 }

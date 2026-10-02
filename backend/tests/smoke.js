@@ -70,6 +70,9 @@ vm.createContext(context);
 vm.runInContext(fs.readFileSync(dir+'/Code.gs','utf8'),context);
 function body(res){return JSON.parse(res.content);}
 
+assert.equal(context.prepareV040Schema(),'v0.4 staging columns ready');
+assert.ok(sheets.MAESTRO_EQUIPOS.values[3].includes('esCritico'));
+assert.ok(sheets.NOVEDADES.values[3].includes('requestIdCierre'));
 const snapshot=body(context.doGet({parameter:{action:'getDashboardCompresores'}}));
 assert.equal(snapshot.ok,true);
 assert.equal(snapshot.data.equipos.length,2);
@@ -98,8 +101,16 @@ assert.equal(sheets.NOVEDADES.values.length,6,'editor adds one novelty');
 const replay=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{requestId:'request-1',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',tipo:'FALLA',criticidad:'ALTA',descripcion:'Prueba operativa'}})}}));
 assert.equal(replay.data.replayed,true);
 assert.equal(sheets.NOVEDADES.values.length,6,'same request id does not duplicate');
+const noveltyHeaders=sheets.NOVEDADES.values[3];
+const formulaSafe=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{requestId:'request-formula',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',tipo:'FALLA',criticidad:'ALTA',descripcion:'=IMPORTXML("https://invalid.example","//x")'}})}}));
+assert.equal(formulaSafe.ok,true);
+assert.equal(sheets.NOVEDADES.values[6][noveltyHeaders.indexOf('descripcion')],"'=IMPORTXML(\"https://invalid.example\",\"//x\")",'free text cannot become a sheet formula');
+const closed=body(context.doPost({postData:{contents:JSON.stringify({action:'closeNovedad',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{novedadId:'N1',requestId:'close-request-1',observacionCierre:'Revisada'}})}}));
+assert.equal(closed.ok,true);
+assert.equal(sheets.NOVEDADES.values[4][noveltyHeaders.indexOf('usuario')],'private@example.com','closing keeps original author');
+assert.equal(sheets.NOVEDADES.values[4][noveltyHeaders.indexOf('usuarioCierre')],'editor@example.org','closing records the closer separately');
 const unknown=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{requestId:'request-2',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'UNKNOWN',tipo:'FALLA',criticidad:'ALTA',descripcion:'Equipo desconocido'}})}}));
 assert.equal(unknown.error.code,'EQUIPMENT_NOT_ACTIVE');
 const decrease=body(context.doPost({postData:{contents:JSON.stringify({action:'saveHorometro',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{requestId:'request-3',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',horometro:509}})}}));
 assert.equal(decrease.error.code,'HOURMETER_DECREASE');
-console.log('Apps Script smoke: OK (sanitización, lectura vigente, dominio/rol, actualización de estado, fecha obsoleta, escritura, idempotencia y límite de horómetro)');
+console.log('Apps Script smoke: OK (migración de encabezados, sanitización, lectura vigente, dominio/rol, estado, fecha obsoleta, alta/cierre, idempotencia, fórmula segura y horómetro)');

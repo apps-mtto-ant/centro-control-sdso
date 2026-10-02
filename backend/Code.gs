@@ -231,7 +231,7 @@ function withScriptLock_(fn) {const lock=LockService.getScriptLock();lock.waitLo
 function groupCount_(rows,key) {const out={};rows.forEach(x=>{const id=String(x[key]||'');if(id)out[id]=(out[id]||0)+1;});return out;}
 function dateMs_(v) {if(v instanceof Date)return v.getTime();if(typeof v==='number')return new Date(Math.round((v-25569)*86400000)).getTime();if(!v)return NaN;return new Date(v).getTime();}
 function numberOrNull_(v) {const n=Number(v);return Number.isFinite(n)?n:null;}
-function short_(v,max) {return String(v||'').trim().slice(0,max);}
+function short_(v,max) {const value=String(v||'').trim().slice(0,max);return /^[=+\-@]/.test(value)?"'"+value:value;}
 function appendByHeaders_(sh,headers,record) {const row=headers.map(h=>record[h]===undefined?'':record[h]);sh.getRange(nextRow_(sh,HEADER_ROW),1,1,headers.length).setValues([row]);}
 function nextRow_(sh,headerRow) {return Math.max(headerRow+1,sh.getLastRow()+1);}
 function sheet_(name) {const ss=spreadsheet_();const sh=ss.getSheetByName(name);if(!sh)throw apiError_('SHEET_NOT_FOUND','No se encontró la hoja '+name+'.');return sh;}
