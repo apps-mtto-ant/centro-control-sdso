@@ -24,9 +24,8 @@ function doGet(e) {
   try {
     const action = String(e && e.parameter && e.parameter.action || 'health').trim();
     let data;
-    if (action === 'health') data = {service:'Centro de Control SDSO',status:'ok',mode:'read-only-public-summary',requiredSheets:[SHEETS.MAESTRO,SHEETS.ESTADO,SHEETS.HOROMETROS,SHEETS.NOVEDADES]};
-    else if (action === 'getEquipos') data = getEquipos_();
-    else if (action === 'getDashboardCompresores') data = getDashboard_();
+    if (action === 'health') data = {service:'Centro de Control SDSO',status:'ok',mode:'authenticated-read-only-summary',requiredSheets:[SHEETS.MAESTRO,SHEETS.ESTADO,SHEETS.HOROMETROS,SHEETS.NOVEDADES]};
+    else if (action === 'getEquipos' || action === 'getDashboardCompresores') throw apiError_('AUTH_REQUIRED','Inicia sesión para consultar los datos.');
     else return response_({ok:false,error:{code:'ACTION_NOT_FOUND',message:'Acción no reconocida.'}});
     return response_({ok:true,apiVersion:API_VERSION,serverTime:new Date().toISOString(),elapsedMs:Date.now()-started,data,error:null});
   } catch (err) {
@@ -44,7 +43,9 @@ function doPost(e) {
     if (action === 'authenticate') data = authenticate_(body.idToken);
     else {
       const identity = verifyIdentity_(body.idToken);
-      if (action === 'getNovedades') data = getNovedades_(identity);
+      if (action === 'getEquipos') data = getEquipos_();
+      else if (action === 'getDashboardCompresores') data = getDashboard_();
+      else if (action === 'getNovedades') data = getNovedades_(identity);
       else {
         requireEditor_(identity);
         data = withScriptLock_(function() {
