@@ -18,6 +18,8 @@
 - Retry del backend ante fallos transitorios.
 
 ### Auditoría
+- Reauditoría de cierre: APTO, sin bloqueadores.
+- R1/R2 cerrados antes del release: protección contra snapshot vacío con IndexedDB lenta y estado activo del menú Dashboard en la vista Compresores.
 - Auditoría integrada: 0 críticos, 4 altos, 13 medios y 10 bajos.
 - Correcciones obligatorias frontend A01/A02/A03/A05 incorporadas en candidata r4.
 - Pendientes de backend antes del release: validación de encabezados, reducción de metadata en `health` y minimización de campos públicos.
