@@ -1,5 +1,31 @@
 # CHANGELOG — Centro de Control SDSO
 
+## v0.3.0 — candidata
+
+### Dashboard Compresores
+- Primer dashboard nativo conectado a Google Apps Script + Google Sheets.
+- 31 equipos activos con KPIs, distribución por área/modelo, conciliación SAP, tabla, búsqueda y filtros.
+- Catálogo de dashboards separado de la vista específica de Compresores: `#/dashboard` → catálogo, `#/dashboard-compresores` → dashboard.
+
+### Offline / resiliencia
+- Dataset de Compresores persistido en IndexedDB.
+- Fallback a caché local validado con recarga completa sin Internet.
+- La consulta de red se inicia sin esperar a IndexedDB.
+- Si la persistencia local falla, los datos válidos de red siguen renderizándose.
+- No se sustituye una caché válida por un snapshot vacío.
+- Timeout de operaciones IndexedDB y recuperación de conexión.
+- Recarga única cuando un Service Worker nuevo toma el control para evitar assets antiguos.
+- Retry del backend ante fallos transitorios.
+
+### Auditoría
+- Auditoría integrada: 0 críticos, 4 altos, 13 medios y 10 bajos.
+- Correcciones obligatorias frontend A01/A02/A03/A05 incorporadas en candidata r4.
+- Pendientes de backend antes del release: validación de encabezados, reducción de metadata en `health` y minimización de campos públicos.
+
+### Datos
+- Conciliación validada: 24 CONFIRMADO, 6 PENDIENTE SAP, 1 ERROR MAESTRO SAP.
+- EQ01, EQ16 y EQ17 confirmados operacionalmente por Mario.
+
 ## v0.2.0 — 2026-10-02
 
 Primera versión estable de la etapa v0.2.
