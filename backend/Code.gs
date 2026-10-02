@@ -2,7 +2,9 @@
  * CENTRO DE CONTROL SDSO · Apps Script v0.4.0
  * Fuente v0.4 para despliegue en staging. No instalar sobre el proyecto de producción.
  * Requiere Script Properties: SPREADSHEET_ID, GOOGLE_CLIENT_ID, ALLOWED_DOMAIN,
- * EDITOR_EMAILS. Requiere usar BD_CENTRO_CONTROL_SDSO de staging.
+ * EDITOR_EMAILS. Para cuentas gmail.com, ALLOWED_EMAILS debe enumerar las
+ * cuentas autorizadas, ya que Gmail no entrega un hosted domain de Workspace.
+ * Requiere usar BD_CENTRO_CONTROL_SDSO de staging.
  */
 const API_VERSION = '0.4.0-rc';
 const SHEETS = Object.freeze({
@@ -71,7 +73,8 @@ function verifyIdentity_(token) {
   const props = PropertiesService.getScriptProperties();
   const clientId = props.getProperty('GOOGLE_CLIENT_ID');
   const domain = String(props.getProperty('ALLOWED_DOMAIN') || '').toLowerCase().replace(/^@/,'');
-  if (!clientId || !domain) throw apiError_('AUTH_NOT_CONFIGURED','La autenticación de staging aún no está configurada.');
+  const allowedEmails = String(props.getProperty('ALLOWED_EMAILS') || '').split(/[\n,;]/).map(x=>x.trim().toLowerCase()).filter(Boolean);
+  if (!clientId || !domain || (domain === 'gmail.com' && !allowedEmails.length)) throw apiError_('AUTH_NOT_CONFIGURED','La autenticación de staging aún no está configurada.');
   const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token);
   let result;
   try {
@@ -84,7 +87,11 @@ function verifyIdentity_(token) {
   const hostedDomain = String(result.hd || '').toLowerCase();
   const verified = String(result.email_verified || '').toLowerCase() === 'true';
   const issuer=String(result.iss||'');
-  if (aud !== clientId || !verified || !email || email.split('@').pop() !== domain || hostedDomain !== domain || (issuer && issuer!=='https://accounts.google.com' && issuer!=='accounts.google.com')) {
+  const emailDomain = email.split('@').pop();
+  const identityAllowed = domain === 'gmail.com'
+    ? emailDomain === 'gmail.com' && allowedEmails.indexOf(email) >= 0
+    : emailDomain === domain && hostedDomain === domain && (!allowedEmails.length || allowedEmails.indexOf(email) >= 0);
+  if (aud !== clientId || !verified || !email || !identityAllowed || (issuer && issuer!=='https://accounts.google.com' && issuer!=='accounts.google.com')) {
     throw apiError_('ACCESS_DENIED','La cuenta no pertenece al dominio autorizado.');
   }
   return {email:email};
