@@ -5,11 +5,11 @@
 
   root.SDSO_CONFIG = Object.freeze({
     version: '0.3.0-dev',
-    environment: 'production',
+    environment: 'development',
     cachePrefix: 'centro-control-sdso-',
     dbName: 'centro-control-sdso',
     lastSyncKey: 'sdso:lastSync',
-    backendUrl: '',
+    backendUrl: 'https://script.google.com/macros/s/AKfycbxvNHInBM-lIBnAQ_CiaEMeW0zcwL1ioVg8nwEjS3daLoTZZ6C0wKFhi7c9RJFwWjs/exec',
 
     links: Object.freeze({
       compressors: Object.freeze({
