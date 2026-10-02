@@ -1,7 +1,7 @@
 (function (root) {
   'use strict';
   root.SDSO_CONFIG = Object.freeze({
-    version: '0.1.1',
+    version: '0.1.2',
     cachePrefix: 'centro-control-sdso-',
     backendUrl: '',
     links: Object.freeze({

@@ -1,4 +1,4 @@
-# Centro de Control SDSO — v0.1.1
+# Centro de Control SDSO — v0.1.2
 
 Esqueleto inicial del nuevo Centro de Control web/PWA de Minera Antucoya · Servicios de Soporte a la Operación.
 
@@ -46,7 +46,7 @@ Los valores compartidos viven en un solo archivo: `js/config.js`.
 - `version`: versión desplegada y versión del caché PWA.
 - `backendUrl`: vacío en esta etapa.
 - `links.compressors.url`: App Compresores vigente.
-- `links.turnReport.url`: completar cuando se incorpore la URL publicada del Centro Informe.
+- `links.turnReport.url`: Centro Informes de Turno vigente en `apps-mtto-ant`.
 
 Solo se aceptan enlaces externos `https:`.
 
@@ -72,7 +72,7 @@ Las rutas son relativas para funcionar bajo una subcarpeta de GitHub Pages.
 
 ## Regla de despliegue PWA
 
-Cada despliegue que cambie HTML, CSS, JS, manifest o recursos del app shell debe incrementar `version` en `js/config.js`. El Service Worker usa ese valor para crear un nuevo caché y elimina únicamente cachés anteriores cuyo nombre comienza con `centro-control-sdso-`.
+Cada despliegue que cambie HTML, CSS, JS, manifest o recursos del app shell debe incrementar `version` en `js/config.js`. El Service Worker usa ese valor para crear un nuevo caché y elimina únicamente cachés anteriores cuyo nombre comienza con `centro-control-sdso-`. El registro usa `updateViaCache: none` y las solicitudes del shell se revalidan sin depender de una copia HTTP obsoleta.
 
 ## Sincronización
 

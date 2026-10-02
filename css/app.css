@@ -99,7 +99,7 @@ code { background: #EDF3F4; padding: 2px 5px; border-radius: 5px; color: #365058
 }
 @media (max-width: 590px) { .card-grid, .compact-grid { grid-template-columns: 1fr; } .topbar-actions #installButton { display: none !important; } }
 
-/* v0.1.1 — correcciones de auditoría */
+/* v0.1.2 — base auditada */
 .sidebar { background: var(--teal); }
 .brand-mark { color: var(--teal); }
 .nav-item { text-decoration: none; }

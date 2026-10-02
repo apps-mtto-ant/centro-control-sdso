@@ -3,7 +3,11 @@ importScripts('./js/config.js');
 const CONFIG = self.SDSO_CONFIG;
 const CACHE_NAME = `${CONFIG.cachePrefix}v${CONFIG.version}`;
 const CACHE_PREFIX = CONFIG.cachePrefix;
-const NETWORK_TIMEOUT_MS = 4000;
+const NAVIGATION_TIMEOUT_MS = 4000;
+const ASSET_TIMEOUT_MS = 2000;
+const DEGRADED_WINDOW_MS = 30000;
+let networkDegradedUntil = 0;
+
 const APP_SHELL = [
   './',
   './index.html',
@@ -19,9 +23,18 @@ const APP_SHELL = [
   './assets/icons/icon-512.png'
 ];
 
-function fetchWithTimeout(request, timeoutMs = NETWORK_TIMEOUT_MS) {
+function isNetworkDegraded() {
+  return Date.now() < networkDegradedUntil;
+}
+
+function markNetworkDegraded() {
+  networkDegradedUntil = Date.now() + DEGRADED_WINDOW_MS;
+}
+
+function fetchFresh(request, timeoutMs) {
+  const freshRequest = new Request(request, { cache: 'no-cache' });
   return Promise.race([
-    fetch(request),
+    fetch(freshRequest),
     new Promise((_, reject) => setTimeout(() => reject(new Error('network-timeout')), timeoutMs))
   ]);
 }
@@ -32,8 +45,18 @@ async function putIfOk(cacheKey, response) {
   await cache.put(cacheKey, response.clone());
 }
 
+async function precacheShell() {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.all(APP_SHELL.map(async url => {
+    const request = new Request(url, { cache: 'no-cache' });
+    const response = await fetch(request);
+    if (!response.ok) throw new Error(`No fue posible precachear ${url}: HTTP ${response.status}`);
+    await cache.put(url, response.clone());
+  }));
+}
+
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)));
+  event.waitUntil(precacheShell());
   self.skipWaiting();
 });
 
@@ -58,12 +81,13 @@ self.addEventListener('fetch', event => {
   if (request.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        const response = await fetchWithTimeout(request);
+        const response = await fetchFresh(request, NAVIGATION_TIMEOUT_MS);
         const scope = new URL(self.registration.scope);
         const isAppEntry = response.ok && (url.pathname === scope.pathname || url.pathname === `${scope.pathname}index.html`);
         if (isAppEntry) await putIfOk('./index.html', response);
         return response;
       } catch {
+        markNetworkDegraded();
         return (await caches.match('./index.html')) || Response.error();
       }
     })());
@@ -71,12 +95,19 @@ self.addEventListener('fetch', event => {
   }
 
   event.respondWith((async () => {
+    const cached = await caches.match(request);
+
+    // Si la navegación ya detectó una red degradada, no repetimos timeouts
+    // para cada recurso del shell. Se sirve caché inmediatamente durante 30 s.
+    if (isNetworkDegraded() && cached) return cached;
+
     try {
-      const response = await fetchWithTimeout(request);
+      const response = await fetchFresh(request, ASSET_TIMEOUT_MS);
       if (response.ok) await putIfOk(request, response);
       return response;
     } catch {
-      return (await caches.match(request)) || Response.error();
+      markNetworkDegraded();
+      return cached || Response.error();
     }
   })());
 });

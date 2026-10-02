@@ -5,11 +5,20 @@ function pad(value) {
 }
 
 export function markSuccessfulSync(date = new Date()) {
-  localStorage.setItem(LAST_SYNC_KEY, date.toISOString());
+  try {
+    localStorage.setItem(LAST_SYNC_KEY, date.toISOString());
+  } catch {
+    // Si el almacenamiento local está bloqueado, la app continúa sin persistir la fecha.
+  }
 }
 
 export function getLastSyncLabel() {
-  const value = localStorage.getItem(LAST_SYNC_KEY);
+  let value = null;
+  try {
+    value = localStorage.getItem(LAST_SYNC_KEY);
+  } catch {
+    return 'Sin sincronizar';
+  }
   if (!value) return 'Sin sincronizar';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return 'Sin sincronizar';
@@ -17,6 +26,6 @@ export function getLastSyncLabel() {
 }
 
 export function initOfflineLayer() {
-  // v0.1.1: no se inventa una sincronización. Solo api.js podrá marcarla tras una respuesta real del backend.
+  // No se inventa una sincronización. Solo una sincronización real de datos podrá marcarla.
   // IndexedDB y cola offline se incorporarán en una etapa posterior.
 }

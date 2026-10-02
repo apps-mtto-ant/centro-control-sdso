@@ -155,7 +155,7 @@ function decorateIcons() {
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   try {
-    await navigator.serviceWorker.register('./service-worker.js', { scope: './' });
+    await navigator.serviceWorker.register('./service-worker.js', { scope: './', updateViaCache: 'none' });
   } catch (error) {
     console.error('No fue posible registrar el Service Worker:', error);
   }
@@ -202,7 +202,7 @@ function boot() {
   updateConnectivity();
   renderSection(currentSectionFromHash());
 
-  // Contratos preparados; v0.1.1 no fuerza backend ni autenticación.
+  // Contratos preparados; esta etapa no fuerza backend ni autenticación.
   void api;
   void auth;
 
