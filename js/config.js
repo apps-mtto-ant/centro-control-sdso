@@ -4,7 +4,7 @@
   const freezeList = items => Object.freeze(items.map(item => Object.freeze(item)));
 
   root.SDSO_CONFIG = Object.freeze({
-    version: '0.3.0-dev',
+    version: '0.3.0-dev-r2',
     environment: 'development',
     cachePrefix: 'centro-control-sdso-',
     dbName: 'centro-control-sdso',
