@@ -51,10 +51,11 @@ class FakeSheet {
   }
 }
 const sheets=Object.fromEntries(Object.entries(tables).map(([n,v])=>[n,new FakeSheet(n,v)]));
-const props={SPREADSHEET_ID:'staging-id',GOOGLE_CLIENT_ID:'client-id',ALLOWED_DOMAIN:'example.org',EDITOR_EMAILS:'editor@example.org'};
+const props={SPREADSHEET_ID:'staging-id',GOOGLE_CLIENT_ID:'client-id',ALLOWED_DOMAIN:'gmail.com',ALLOWED_EMAILS:'editor@gmail.com,reader@gmail.com',EDITOR_EMAILS:'editor@gmail.com'};
 function tokenInfo(token){
-  if(token==='EDITOR_TOKEN_LONG_123456789012345678901234567890')return {email:'editor@example.org',aud:'client-id',email_verified:true,hd:'example.org'};
-  if(token==='READER_TOKEN_LONG_123456789012345678901234567890')return {email:'reader@example.org',aud:'client-id',email_verified:true,hd:'example.org'};
+  if(token==='EDITOR_TOKEN_LONG_123456789012345678901234567890')return {email:'editor@gmail.com',aud:'client-id',email_verified:true};
+  if(token==='READER_TOKEN_LONG_123456789012345678901234567890')return {email:'reader@gmail.com',aud:'client-id',email_verified:true};
+  if(token==='OUTSIDER_TOKEN_LONG_123456789012345678901234567890')return {email:'outsider@gmail.com',aud:'client-id',email_verified:true};
   return null;
 }
 const context={
@@ -91,6 +92,8 @@ assert.equal(invalid.error.code,'AUTH_INVALID');
 const details=body(context.doPost({postData:{contents:JSON.stringify({action:'getNovedades',idToken:'READER_TOKEN_LONG_123456789012345678901234567890'})}}));
 assert.equal(details.data.novedades.length,1);
 assert.equal(JSON.stringify(details).includes('private@example.org'),false,'authenticated novelty response still omits author email');
+const outsider=body(context.doPost({postData:{contents:JSON.stringify({action:'getNovedades',idToken:'OUTSIDER_TOKEN_LONG_123456789012345678901234567890'})}}));
+assert.equal(outsider.error.code,'ACCESS_DENIED','consumer Gmail access is limited to the exact allowlist');
 const status=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{requestId:'state-request-1',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'}})}}));
 assert.equal(status.ok,true);
 const stale=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{requestId:'state-request-2',fechaHora:'2026-10-01T10:00:00.000Z',equipoId:'EQ01',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'}})}}));
@@ -108,7 +111,7 @@ assert.equal(sheets.NOVEDADES.values[6][noveltyHeaders.indexOf('descripcion')],"
 const closed=body(context.doPost({postData:{contents:JSON.stringify({action:'closeNovedad',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{novedadId:'N1',requestId:'close-request-1',observacionCierre:'Revisada'}})}}));
 assert.equal(closed.ok,true);
 assert.equal(sheets.NOVEDADES.values[4][noveltyHeaders.indexOf('usuario')],'private@example.com','closing keeps original author');
-assert.equal(sheets.NOVEDADES.values[4][noveltyHeaders.indexOf('usuarioCierre')],'editor@example.org','closing records the closer separately');
+assert.equal(sheets.NOVEDADES.values[4][noveltyHeaders.indexOf('usuarioCierre')],'editor@gmail.com','closing records the closer separately');
 const unknown=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{requestId:'request-2',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'UNKNOWN',tipo:'FALLA',criticidad:'ALTA',descripcion:'Equipo desconocido'}})}}));
 assert.equal(unknown.error.code,'EQUIPMENT_NOT_ACTIVE');
 const decrease=body(context.doPost({postData:{contents:JSON.stringify({action:'saveHorometro',idToken:'EDITOR_TOKEN_LONG_123456789012345678901234567890',data:{requestId:'request-3',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',horometro:509}})}}));
