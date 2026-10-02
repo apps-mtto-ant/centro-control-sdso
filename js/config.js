@@ -11,7 +11,7 @@
     lastSyncKey: 'sdso:lastSync',
     // Se configura con el endpoint de Apps Script del libro de staging.
     // Nunca reutilizar aquí la URL productiva durante el desarrollo.
-    backendUrl: '',
+    backendUrl: 'https://script.google.com/macros/s/AKfycbxJTs7TKUhHNK5YFAQofouB86GmzlSG9BodXvFjVke93BbyjHDp9TkPrMipU5mkdIU/exec',
     googleClientId: '392994193626-8sa4j1hngsrttslqdlkkis6gr2fvjbuv.apps.googleusercontent.com',
 
     links: Object.freeze({
