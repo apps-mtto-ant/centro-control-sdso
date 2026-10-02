@@ -13,7 +13,7 @@
       turnReport: Object.freeze({
         name: 'Centro Informe Fin de Turno',
         description: 'Aplicación vigente para informe y consolidación del turno.',
-        url: ''
+        url: 'https://apps-mtto-ant.github.io/Centro-Informes-Turno/'
       })
     })
   });
