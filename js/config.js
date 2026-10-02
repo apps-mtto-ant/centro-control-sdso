@@ -4,12 +4,15 @@
   const freezeList = items => Object.freeze(items.map(item => Object.freeze(item)));
 
   root.SDSO_CONFIG = Object.freeze({
-    version: '0.3.0',
-    environment: 'production',
+    version: '0.4.0-dev',
+    environment: 'development',
     cachePrefix: 'centro-control-sdso-',
     dbName: 'centro-control-sdso',
     lastSyncKey: 'sdso:lastSync',
-    backendUrl: 'https://script.google.com/macros/s/AKfycbxvNHInBM-lIBnAQ_CiaEMeW0zcwL1ioVg8nwEjS3daLoTZZ6C0wKFhi7c9RJFwWjs/exec',
+    // Se configura con el endpoint de Apps Script del libro de staging.
+    // Nunca reutilizar aquí la URL productiva durante el desarrollo.
+    backendUrl: '',
+    googleClientId: '',
 
     links: Object.freeze({
       compressors: Object.freeze({

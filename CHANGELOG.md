@@ -1,5 +1,14 @@
 # CHANGELOG — Centro de Control SDSO
 
+# v0.4.0 — desarrollo
+
+- Dashboard Compresores reestructurado en vistas operacionales para resumen, áreas, disponibilidad, horómetros, novedades, maestro, SAP y fin de turno.
+- Formularios de supervisión previstos para estado vigente, lecturas y novedades; escritura requiere sesión validada por Apps Script y lista de editores.
+- Fuente del horómetro vigente definida como última lectura del historial.
+- Conciliación SAP calculada desde MAESTRO_EQUIPOS. Se agregan validación/idempotencia de registros y respuesta pública reducida.
+- Captura de vista activa e informe fin de turno con alternativa de impresión/PDF.
+- No habilitar formularios hasta desplegar y validar el backend y el Sheet de staging.
+
 ## v0.3.0 — candidata
 
 ### Dashboard Compresores

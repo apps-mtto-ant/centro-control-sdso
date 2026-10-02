@@ -1,5 +1,7 @@
 # Centro de Control SDSO — v0.3
 
+> La rama `develop-v0.4` contiene la candidata en desarrollo. Lee [docs/V0.4_SCOPE.md](docs/V0.4_SCOPE.md) y [backend/README.md](backend/README.md) antes de conectar recursos de staging. La configuración de v0.4 mantiene `backendUrl` vacío hasta crear el endpoint separado.
+
 Candidata de la etapa v0.3 del Centro de Control web/PWA de Minera Antucoya · Servicios de Soporte a la Operación.
 
 ## Alcance v0.3
