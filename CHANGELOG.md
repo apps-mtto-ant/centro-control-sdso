@@ -1,56 +1,67 @@
 # CHANGELOG — Centro de Control SDSO
 
-## v0.1.2 — 01/10/2026
+## v0.2.0 — 2026-10-02
 
-Versión técnica de estabilización posterior a la reauditoría de v0.1.1.
+Primera versión estable de la etapa v0.2.
 
-### Corregido
+### Navegación y organización
+- Navegación lateral simplificada: Inicio, Aplicaciones SDSO, Dashboard, Power BI e Informes / herramientas.
+- Compresores y Centro Informe se retiran de la barra lateral por redundancia; permanecen como accesos rápidos en Inicio y dentro de Aplicaciones SDSO.
+- Se incorpora la sección principal Dashboard, preparada para la migración progresiva de dashboards SDSO.
+- Catálogo de Aplicaciones SDSO: App Compresores, Centro Informes de Turno, Mantención Clima ANT, Puentes Grúa y Polipastos ANT e Inspección de Polines.
 
-- El Service Worker se registra con `updateViaCache: 'none'` para que sus imports no queden retenidos por la caché HTTP durante una actualización.
-- Navegación y recursos del app shell se solicitan con `cache: 'no-cache'`, permitiendo revalidar cambios publicados inmediatamente.
-- El precache de una nueva versión también fuerza revalidación, evitando crear un caché nuevo con assets HTTP antiguos.
-- El timeout de red deja de acumularse por oleadas: si una solicitud detecta red degradada, durante 30 s los recursos ya cacheados se sirven inmediatamente.
-- Timeout de navegación: 4 s; timeout de assets: 2 s cuando aún no se ha detectado degradación.
-- URL oficial del Centro Informes de Turno incorporada en `js/config.js`.
-- Texto de configuración actualizado de `js/app.js` a `js/config.js` y eliminadas referencias visuales rígidas a una versión concreta.
-- Acceso a `localStorage` protegido para que políticas del navegador no interrumpan el arranque.
+### PWA / offline
+- El Service Worker se registra sin depender de IndexedDB.
+- Fallback a caché ante respuestas HTTP 5xx cuando existe una copia válida.
+- Respuesta inmediata desde caché durante ventanas de red degradada para evitar timeouts acumulados.
+- Aislamiento seguro entre producción y staging mediante prefijos de caché no solapados.
+- Protección del almacenamiento local y apertura offline del app shell.
 
-### Alcance sin cambios
+### IndexedDB y API
+- Se incorpora `js/db.js` con stores iniciales `datasets`, `meta` y `outbox`.
+- IndexedDB incorpora timeout, `onblocked`, `onversionchange`, reintento tras fallo y confirmación de escrituras al completar la transacción.
+- `api.js` normaliza errores mediante `ApiError`.
+- `health()` no marca sincronización real.
+- `auth.can('consultar')` queda habilitado para el rol provisional LECTOR; la autorización real seguirá validándose backend-side.
 
-- Sin backend productivo.
-- Sin roles/autorización implementados.
-- App Compresores y Centro Informe permanecen como aplicaciones externas.
-- Sin migración del Dashboard Compresores todavía.
+### Interfaz y accesibilidad
+- Topbar móvil más compacta y texto de sincronización legible.
+- Foco correcto del drawer móvil y retorno al botón de menú al cerrar.
+- Scroll al inicio al cambiar de sección.
+- Iconografía específica para Compresores.
+- Aplicaciones, Power BI e Informes/Herramientas se renderizan desde `js/config.js`.
 
-## v0.1.1 — 01/10/2026
+### Entorno productivo
+- `version: 0.2.0`
+- `environment: production`
+- `cachePrefix: centro-control-sdso-`
+- `dbName: centro-control-sdso`
+- `lastSyncKey: sdso:lastSync`
 
-Versión correctiva posterior a auditoría Claude de v0.1.
+### Validaciones realizadas
+- Cinco enlaces de Aplicaciones SDSO verificados por Mario.
+- App shell offline validado en staging y producción.
+- Staging verificado sin interferir con el caché offline de producción.
+- Polines y Centro Informe actualmente no tienen Service Worker, por lo que no interfieren con el caché del Centro de Control.
 
-### Corregido
+### Pendientes de etapas posteriores
+- La conectividad visible sigue basada en `navigator.onLine`; los estados `SINCRONIZANDO` y `CAMBIOS PENDIENTES` se activarán cuando exista backend/sincronización y edición offline reales.
+- Antes de agregar páginas HTML separadas en `dashboards/` o `modules/`, revisar el fallback de navegación del Service Worker.
+- Al migrar Compresores, Clima o Puentes al origen `apps-mtto-ant.github.io`, revisar sus Service Workers antes de publicar.
 
-- Eliminada la creación de una fecha de sincronización ficticia.
-- Service Worker elimina solo cachés propios con prefijo `centro-control-sdso-`.
-- Shell PWA cambia a network-first con fallback a caché y timeout de 4 s.
-- No se cachean respuestas HTTP no satisfactorias.
-- Una ruta inexistente no reemplaza el `index.html` almacenado.
-- Estado online/offline y última sincronización visibles permanentemente en móvil.
-- Fecha de sincronización normalizada a `DD/MM/AAAA HH:MM`.
-- Navegación basada en hash con historial y soporte del botón Atrás.
-- Configuración de versión y enlaces externos centralizada en `js/config.js`.
-- Catálogo de aplicaciones construido con DOM y `textContent`; enlaces limitados a `https:`.
-- Drawer móvil con overlay, cierre por Escape/clic fuera, `inert` y `focus-visible`.
-- Íconos de navegación reemplazados por SVG inline.
-- Manifest ajustado con `id` y entradas `any` / `maskable` separadas.
-- Carpetas `dashboards/` y `modules/` conservadas con `.gitkeep`.
-- README ampliado con publicación, pruebas locales y regla de versionado PWA.
+## v0.1.2
 
-### Alcance sin cambios
+- Corrección C3 residual: Service Worker registrado con `updateViaCache: 'none'` y revalidación del shell con `cache: 'no-cache'`.
+- Corrección N1: detección temporal de red degradada para evitar timeouts acumulados en recursos cacheados.
+- Protección de `localStorage` ante almacenamiento bloqueado.
+- URL real del Centro Informe Fin de Turno incorporada.
+- Textos y documentación actualizados.
 
-- Sin backend productivo.
-- Sin roles/autorización implementados.
-- App Compresores y Centro Informe permanecen como aplicaciones externas.
-- Sin migración del Dashboard Compresores todavía.
+## v0.1.1
 
-## v0.1.0 — 01/10/2026
-
-- Esqueleto inicial del Centro de Control SDSO.
+- Corrección de sincronización ficticia.
+- Aislamiento de cachés respecto de otras PWA del mismo origen.
+- Navegación por hash con historial.
+- Catálogo seguro sin `innerHTML` para datos configurables.
+- Indicador online/offline visible en móvil.
+- Manifest, accesibilidad y documentación reforzados.

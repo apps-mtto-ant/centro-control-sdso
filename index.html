@@ -26,14 +26,11 @@
         <a class="nav-item is-active" data-section="inicio" href="#/inicio" aria-current="page">
           <span class="nav-icon" aria-hidden="true"></span><span>Inicio</span>
         </a>
-        <a class="nav-item" data-section="compresores" href="#/compresores">
-          <span class="nav-icon" aria-hidden="true"></span><span>Compresores</span>
-        </a>
-        <a class="nav-item" data-section="centro-informe" href="#/centro-informe">
-          <span class="nav-icon" aria-hidden="true"></span><span>Centro Informe</span>
-        </a>
         <a class="nav-item" data-section="apps" href="#/apps">
           <span class="nav-icon" aria-hidden="true"></span><span>Aplicaciones SDSO</span>
+        </a>
+        <a class="nav-item" data-section="dashboard" href="#/dashboard">
+          <span class="nav-icon" aria-hidden="true"></span><span>Dashboard</span>
         </a>
         <a class="nav-item" data-section="powerbi" href="#/powerbi">
           <span class="nav-icon" aria-hidden="true"></span><span>Power BI</span>
@@ -70,7 +67,7 @@
         <section class="view is-visible" data-view="inicio">
           <div class="hero">
             <div>
-              <p class="eyebrow" id="versionLabel">VERSIÓN 0.1.1</p>
+              <p class="eyebrow" id="versionLabel">VERSIÓN</p>
               <h2>Centro de Control SDSO</h2>
               <p>Portal único para acceso a aplicaciones, dashboards, Power BI, informes y herramientas de Servicios de Soporte a la Operación.</p>
             </div>
@@ -101,6 +98,11 @@
               <div><span class="module-kicker">APLICACIONES</span><h4>Aplicaciones SDSO</h4><p>Punto de entrada para las aplicaciones operacionales vigentes.</p></div>
               <a class="text-link" href="#/apps">Ver aplicaciones →</a>
             </article>
+            <article class="module-card accent-teal">
+              <div class="module-icon" data-module-icon="dashboard"></div>
+              <div><span class="module-kicker">VISUALIZACIÓN</span><h4>Dashboard</h4><p>Acceso a los dashboards SDSO. Compresores será el primero en migrar a la nueva arquitectura web.</p></div>
+              <a class="text-link" href="#/dashboard">Ver dashboards →</a>
+            </article>
             <article class="module-card accent-gray">
               <div class="module-icon" data-module-icon="powerbi"></div>
               <div><span class="module-kicker">ANALÍTICA</span><h4>Power BI</h4><p>Accesos a reportes corporativos externos.</p></div>
@@ -121,7 +123,7 @@
           <div class="panel external-panel">
             <div>
               <h3>App Compresores</h3>
-              <p>Durante v0.1 la aplicación actual se mantiene independiente. El Centro de Control sólo proporciona el acceso y no modifica su código ni backend.</p>
+              <p>La aplicación actual se mantiene independiente durante esta etapa. El Centro de Control proporciona el acceso sin modificar su código ni backend.</p>
             </div>
             <a class="primary-btn" id="compressorsExternalLink" >Abrir App Compresores ↗</a>
           </div>
@@ -151,14 +153,27 @@
           <div class="card-grid compact-grid" id="appsCatalog"></div>
         </section>
 
+        <section class="view" data-view="dashboard">
+          <div class="section-heading"><div><p class="eyebrow">DASHBOARDS SDSO</p><h2>Dashboard</h2></div></div>
+          <div class="panel muted-panel">
+            <span class="badge">PRÓXIMA MIGRACIÓN</span>
+            <h3>Dashboard Compresores</h3>
+            <p>Será el primer dashboard nativo del nuevo Centro de Control. Su integración se realizará sobre Apps Script + Google Sheets, sin depender de Python ni localhost.</p>
+          </div>
+          <div class="empty-state resource-empty">
+            <strong>Siguientes dashboards</strong>
+            <p>Clima, Puentes Grúa, Portones, RCI, Caminos y el resto de dashboards SDSO se incorporarán progresivamente.</p>
+          </div>
+        </section>
+
         <section class="view" data-view="powerbi">
           <div class="section-heading"><div><p class="eyebrow">ENLACES EXTERNOS</p><h2>Power BI</h2></div></div>
-          <div class="empty-state"><strong>Sin enlaces configurados todavía</strong><p>v0.1 deja preparado el módulo. Los enlaces se incorporarán sin cambiar la arquitectura.</p></div>
+          <div class="card-grid compact-grid" id="powerbiCatalog"></div>
         </section>
 
         <section class="view" data-view="informes">
           <div class="section-heading"><div><p class="eyebrow">RECURSOS</p><h2>Informes / herramientas</h2></div></div>
-          <div class="empty-state"><strong>Sin recursos configurados todavía</strong><p>El módulo está preparado para incorporar accesos sin cambiar la arquitectura.</p></div>
+          <div class="card-grid compact-grid" id="toolsCatalog"></div>
         </section>
       </section>
     </main>
