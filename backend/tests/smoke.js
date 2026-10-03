@@ -31,9 +31,11 @@ const tables = {
   _LISTAS: [
     ['ACTIVO','TIPO_OBJETO','ESTADO_VALIDACION_SAP','ESTADO_OPERACIONAL','DISPONIBILIDAD','TIPO_NOVEDAD','ESTADO_NOVEDAD','CRITICIDAD'],
     ['SI','EQUIPO','CONFIRMADO','OPERATIVO','DISPONIBLE','FALLA','ABIERTA','BAJA'],
-    ['NO','SALA','PENDIENTE SAP','FUERA DE SERVICIO','INDISPONIBLE','MANTENCION','EN SEGUIMIENTO','MEDIA'],
-    ['', 'OTRO','SIN SAP','','','OPERACION','CERRADA','ALTA'],
-    ['', '', '', '', '', '', '', '']
+    ['NO','SALA','PENDIENTE SAP','STAND BY','NO DISPONIBLE','MANTENCION','EN SEGUIMIENTO','MEDIA'],
+    ['', 'OTRO','SIN SAP','FUERA DE SERVICIO','','OPERACION','CERRADA','ALTA'],
+    ['', '', '', 'OVERHAUL', '', '', '', ''],
+    ['', '', '', 'MANTENCION', '', '', '', ''],
+    ['', '', '', 'FALLA', '', '', '', '']
   ]
 };
 
@@ -173,12 +175,21 @@ assert.equal(sheets.LECTURAS_HOROMETRO.values[6][0],savedHour.data.lecturaId,'fi
 assert.equal(sheets.LECTURAS_HOROMETRO.values[999][0],'','filler rows remain untouched');
 const conflict=body(context.doPost({postData:{contents:JSON.stringify({action:'saveHorometro',idToken:EDITOR_TOKEN,data:{requestId:'request-hour-valid',fechaHora:'2026-10-02T13:00:00.000Z',equipoId:'EQ01',horometro:20}})}}));assert.equal(conflict.error.code,'REQUEST_ID_CONFLICT','request IDs cannot silently replay a different payload');
 const eq2Current=()=>sheets.ESTADO_ACTUAL.values.find(r=>r[sheets.ESTADO_ACTUAL.values[3].indexOf('equipoId')]==='EQ02');
-const beforeStateMatrix=JSON.stringify(sheets.ESTADO_ACTUAL.values);
-const invalidNoAplicaState=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'na-state',fechaHora:'2026-10-02T14:00:00.000Z',equipoId:'EQ02',estado:'NO APLICA',disponibilidad:'INDISPONIBLE'}})}}));assert.equal(invalidNoAplicaState.error.code,'INVALID_ESTADO');
-const invalidNoAplicaAvailability=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'na-availability',fechaHora:'2026-10-02T14:01:00.000Z',equipoId:'EQ02',estado:'OPERATIVO',disponibilidad:'NO APLICA'}})}}));assert.equal(invalidNoAplicaAvailability.error.code,'INVALID_DISPONIBILIDAD');
-const invalidCrossA=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'cross-a',fechaHora:'2026-10-02T14:02:00.000Z',equipoId:'EQ02',estado:'OPERATIVO',disponibilidad:'INDISPONIBLE'}})}}));assert.equal(invalidCrossA.error.code,'INVALID_STATE_COMBINATION');
-const invalidCrossB=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'cross-b',fechaHora:'2026-10-02T14:03:00.000Z',equipoId:'EQ02',estado:'FUERA DE SERVICIO',disponibilidad:'DISPONIBLE'}})}}));assert.equal(invalidCrossB.error.code,'INVALID_STATE_COMBINATION');
-assert.equal(JSON.stringify(sheets.ESTADO_ACTUAL.values),beforeStateMatrix,'all invalid state combinations leave current state untouched');
-const validOutOfService=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'matrix-valid-b',fechaHora:'2026-10-02T14:04:00.000Z',equipoId:'EQ02',estado:'FUERA DE SERVICIO',disponibilidad:'INDISPONIBLE'}})}}));assert.equal(validOutOfService.ok,true,'approved FUERA DE SERVICIO + INDISPONIBLE pair saves');
-const legacyRow=eq2Current();legacyRow[sheets.ESTADO_ACTUAL.values[3].indexOf('estado')]='NO APLICA';legacyRow[sheets.ESTADO_ACTUAL.values[3].indexOf('disponibilidad')]='INDISPONIBLE';const legacySnapshot=body(context.doPost({postData:{contents:JSON.stringify({action:'getDashboardCompresores',idToken:READER_TOKEN})}}));const legacyEquipment=legacySnapshot.data.equipos.find(x=>x.equipoId==='EQ02');assert.equal(legacyEquipment.estadoActual,null,'getDashboard wires legacy normalization into equipment payload');assert.equal(legacySnapshot.data.resumen.sinEstado,1,'legacy invalid state is counted as Sin estado');assert.equal(Object.prototype.hasOwnProperty.call(legacySnapshot.data.resumen,'noAplica'),false,'NO APLICA is not exposed as a separate category');
-console.log('Apps Script smoke: OK (AUTH12 behavioral matrix, legacy normalization wiring, non-key history headers, auth/roles, state, novelty, idempotency, formula safety and hourmeter validation)');
+const invalidNoAplicaState=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'na-state',fechaHora:'2026-10-02T14:00:00.000Z',equipoId:'EQ02',estado:'NO APLICA'}})}}));assert.equal(invalidNoAplicaState.error.code,'INVALID_ESTADO');
+
+const derivedCases=[
+  ['state-standby','2026-10-02T14:01:00.000Z','STAND BY','DISPONIBLE'],
+  ['state-oos','2026-10-02T14:02:00.000Z','FUERA DE SERVICIO','NO DISPONIBLE'],
+  ['state-overhaul','2026-10-02T14:03:00.000Z','OVERHAUL','NO DISPONIBLE'],
+  ['state-maint','2026-10-02T14:04:00.000Z','MANTENCION','NO DISPONIBLE'],
+  ['state-fail','2026-10-02T14:05:00.000Z','FALLA','NO DISPONIBLE'],
+  ['state-op','2026-10-02T14:06:00.000Z','OPERATIVO','DISPONIBLE']
+];
+for(const [requestId,fechaHora,estado,expectedAvailability] of derivedCases){
+  const result=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId,fechaHora,equipoId:'EQ02',estado,disponibilidad:estado==='MANTENCION'?'DISPONIBLE':'VALOR CLIENTE IGNORADO'}})}}));
+  assert.equal(result.ok,true,estado+' must save');
+  const row=eq2Current();assert.equal(row[sheets.ESTADO_ACTUAL.values[3].indexOf('estado')],estado);assert.equal(row[sheets.ESTADO_ACTUAL.values[3].indexOf('disponibilidad')],expectedAvailability,estado+' derives availability on server');
+}
+const legacyRow=eq2Current();legacyRow[sheets.ESTADO_ACTUAL.values[3].indexOf('estado')]='FUERA DE SERVICIO';legacyRow[sheets.ESTADO_ACTUAL.values[3].indexOf('disponibilidad')]='INDISPONIBLE';const legacySnapshot=body(context.doPost({postData:{contents:JSON.stringify({action:'getDashboardCompresores',idToken:READER_TOKEN})}}));const legacyEquipment=legacySnapshot.data.equipos.find(x=>x.equipoId==='EQ02');assert.equal(legacyEquipment.estadoActual.disponibilidad,'NO DISPONIBLE','legacy INDISPONIBLE is normalized to NO DISPONIBLE on read');assert.equal(legacySnapshot.data.resumen.indisponibles,1,'legacy unavailable state remains unavailable');
+legacyRow[sheets.ESTADO_ACTUAL.values[3].indexOf('estado')]='NO APLICA';legacyRow[sheets.ESTADO_ACTUAL.values[3].indexOf('disponibilidad')]='NO APLICA';const invalidLegacySnapshot=body(context.doPost({postData:{contents:JSON.stringify({action:'getDashboardCompresores',idToken:READER_TOKEN})}}));assert.equal(invalidLegacySnapshot.data.equipos.find(x=>x.equipoId==='EQ02').estadoActual,null,'unknown legacy state is projected as Sin estado');assert.equal(Object.prototype.hasOwnProperty.call(invalidLegacySnapshot.data.resumen,'noAplica'),false,'NO APLICA is not exposed as a separate category');
+console.log('Apps Script smoke: OK (AUTH12 six-state derived availability, legacy normalization, non-key history headers, auth/roles, idempotency, formula safety and hourmeter validation)');
