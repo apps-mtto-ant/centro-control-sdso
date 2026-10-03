@@ -5,7 +5,7 @@
  * ALLOWED_EMAILS y EDITOR_EMAILS. ALLOWED_EMAILS debe enumerar siempre las cuentas autorizadas;
  * Requiere usar BD_CENTRO_CONTROL_SDSO de staging.
  */
-const API_VERSION = '0.4.0-rc5';
+const API_VERSION = '0.4.0-rc6';
 const TOKENINFO_MAX_PER_MINUTE = 30;
 const SHEETS = Object.freeze({
   MAESTRO: 'MAESTRO_EQUIPOS', ESTADO: 'ESTADO_ACTUAL', HOROMETROS: 'LECTURAS_HOROMETRO',
@@ -155,7 +155,7 @@ function getDashboard_() {
   const open = novelties.rows.filter(n=>String(n.estado||'').toUpperCase()!=='CERRADA');
   const openCounts = groupCount_(open,'equipoId');
   const items = master.rows.filter(m=>String(m.tipoObjeto||'').toUpperCase()==='EQUIPO'&&String(m.activo||'').toUpperCase()==='SI').map(m=>{
-    const id=String(m.equipoId||''); const state=statesById[id]||null; const reading=lastReadings[id]||null;
+    const id=String(m.equipoId||''); const state=normalizeOperationalState_(statesById[id]||null); const reading=lastReadings[id]||null;
     return {
       equipoId:id,
       maestro:{activo:m.activo||'',areaOperacional:m.areaOperacional||'',ubicacionFisica:m.ubicacionFisica||'',tag:m.tag||'',numeroEquipoSAP:m.numeroEquipoSAP||'',marca:m.marca||'',tipo:m.tipo||'',modelo:m.modelo||'',modeloSAP:m.modeloSAP||'',denominacion:m.denominacion||'',aplicaKpi:m.aplicaKpi||'',esCritico:m.esCritico||'',estadoValidacionSAP:m.estadoValidacionSAP||''},
@@ -164,10 +164,10 @@ function getDashboard_() {
       novedadesAbiertas:openCounts[id]||0
     };
   });
-  const byArea={},byModel={},sap={};let available=0,unavailable=0,noState=0,noAplica=0;
+  const byArea={},byModel={},sap={};let available=0,unavailable=0,noState=0;
   items.forEach(x=>{
-    const area=x.maestro.areaOperacional||'SIN ÁREA';const a=byArea[area]||(byArea[area]={total:0,disponibles:0,indisponibles:0,sinEstado:0,noAplica:0});a.total++;
-    const d=String(x.estadoActual&&x.estadoActual.disponibilidad||'').toUpperCase();const operational=String(x.estadoActual&&x.estadoActual.estado||'').toUpperCase();if(d==='DISPONIBLE'){available++;a.disponibles++;}else if(d==='INDISPONIBLE'){unavailable++;a.indisponibles++;}else if(d==='NO APLICA'||operational==='NO APLICA'){noAplica++;a.noAplica++;}else{noState++;a.sinEstado++;}
+    const area=x.maestro.areaOperacional||'SIN ÁREA';const a=byArea[area]||(byArea[area]={total:0,disponibles:0,indisponibles:0,sinEstado:0});a.total++;
+    const d=String(x.estadoActual&&x.estadoActual.disponibilidad||'').toUpperCase();if(d==='DISPONIBLE'){available++;a.disponibles++;}else if(d==='INDISPONIBLE'){unavailable++;a.indisponibles++;}else{noState++;a.sinEstado++;}
     const model=normalizeModel_(x.maestro.modelo||'SIN MODELO');byModel[model]=(byModel[model]||0)+1;
     const validation=x.maestro.estadoValidacionSAP||'SIN ESTADO';sap[validation]=(sap[validation]||0)+1;
   });
@@ -180,7 +180,7 @@ function getDashboard_() {
   const inactiveCount=sapRows.filter(m=>String(m.activo||'').toUpperCase()!=='SI').length;
   const modelMismatch=sapRows.filter(m=>m.modelo&&m.modeloSAP&&normalizeModel_(m.modelo)!==normalizeModel_(m.modeloSAP)).map(m=>({equipoId:m.equipoId,modelo:m.modelo,modeloSAP:m.modeloSAP}));
   const sapMaster=sapRows.map(m=>({maestro:{activo:m.activo||'',estadoValidacionSAP:m.estadoValidacionSAP||''}}));
-  return {resumen:{totalEquipos:items.length,disponibles:available,indisponibles:unavailable,sinEstado:noState,noAplica:noAplica,novedadesAbiertas:open.length,ultimaActualizacion:dates.length?new Date(Math.max.apply(null,dates)).toISOString():null},porArea:byArea,porModelo:byModel,validacionSAP:sap,equipos:items,listas:lists,conciliacionSAP:{activos:activeMaster.length,inactivos:inactiveCount,sinSAP:activeMaster.filter(m=>!String(m.numeroEquipoSAP||'').trim()).length,duplicadosSAP:duplicates,modeloNoEquivalente:modelMismatch,equipos:sapMaster}};
+  return {resumen:{totalEquipos:items.length,disponibles:available,indisponibles:unavailable,sinEstado:noState,novedadesAbiertas:open.length,ultimaActualizacion:dates.length?new Date(Math.max.apply(null,dates)).toISOString():null},porArea:byArea,porModelo:byModel,validacionSAP:sap,equipos:items,listas:lists,conciliacionSAP:{activos:activeMaster.length,inactivos:inactiveCount,sinSAP:activeMaster.filter(m=>!String(m.numeroEquipoSAP||'').trim()).length,duplicadosSAP:duplicates,modeloNoEquivalente:modelMismatch,equipos:sapMaster}};
 }
 
 function getEquipos_() {
@@ -198,13 +198,14 @@ function saveEstado_(data,identity) {
   const clean=validateCommon_(data);const ss=sheet_(SHEETS.ESTADO);const table=readObjects_(SHEETS.ESTADO);validateWriteHeaders_(SHEETS.ESTADO,table.headers,['equipoId','estado','subestado','disponibilidad','ubicacionActual','fechaHoraActualizacion','fuente','usuario','observacion']);
   if(!table.headers.includes('fechaRegistro')||!table.headers.includes('requestId'))throw apiError_('SCHEMA_UPGRADE_REQUIRED','La hoja de estado requiere fechaRegistro y requestId en staging.');
   requireActiveEquipment_(clean.equipoId);
-  requireChoice_(data.estado,readLists_().estadoOperacional,'estado');requireChoice_(data.disponibilidad,readLists_().disponibilidad,'disponibilidad');
+  const lists=readLists_();requireChoice_(data.estado,lists.estadoOperacional,'estado');requireChoice_(data.disponibilidad,lists.disponibilidad,'disponibilidad');
+  const state=String(data.estado||'').trim().toUpperCase(),availability=String(data.disponibilidad||'').trim().toUpperCase();
+  const validPair=(state==='OPERATIVO'&&availability==='DISPONIBLE')||(state==='FUERA DE SERVICIO'&&availability==='INDISPONIBLE');
+  if(!validPair)throw apiError_('INVALID_STATE_COMBINATION','Solo se permite OPERATIVO + DISPONIBLE o FUERA DE SERVICIO + INDISPONIBLE.');
   const history=sheet_(SHEETS.HISTORIAL_ESTADO);const historyTable=readObjects_(SHEETS.HISTORIAL_ESTADO);validateHeaders_(SHEETS.HISTORIAL_ESTADO,historyTable.headers,HISTORY_HEADERS);
   const priorHistory=historyTable.rows.find(x=>String(x.requestId||'')===clean.requestId);
   if(priorHistory&&(String(priorHistory.equipoId)!==clean.equipoId||String(priorHistory.estadoNuevo)!==String(data.estado).trim()||String(priorHistory.disponibilidadNueva)!==String(data.disponibilidad).trim()||dateMs_(priorHistory.fechaHoraOperacional)!==dateMs_(clean.fechaHora)))throw apiError_('REQUEST_ID_CONFLICT','El identificador de solicitud ya fue usado con otros datos.');
   if(priorHistory&&historyTable.rows.some(x=>String(x.equipoId)===clean.equipoId&&x._row>priorHistory._row))return {saved:true,replayed:true,superseded:true};
-  const stateNoAplica=String(data.estado||'').trim().toUpperCase()==='NO APLICA';const availabilityNoAplica=String(data.disponibilidad||'').trim().toUpperCase()==='NO APLICA';
-  if(stateNoAplica!==availabilityNoAplica)throw apiError_('INCONSISTENT_STATE','Si el estado o la disponibilidad es NO APLICA, ambos campos deben quedar en NO APLICA.');
   const hit=table.rows.filter(x=>String(x.equipoId)===clean.equipoId);if(hit.length>1)throw apiError_('DUPLICATE_EQUIPMENT_STATE','ESTADO_ACTUAL contiene más de una fila para este equipo. Corregir duplicados en staging.');
   const existing=hit[0]||{};
   if(existing.requestId===clean.requestId&&priorHistory&&String(existing.estado||'')===String(data.estado).trim()&&String(existing.disponibilidad||'')===String(data.disponibilidad).trim()&&dateMs_(existing.fechaHoraActualizacion)===dateMs_(clean.fechaHora)&&String(existing.subestado||'')===short_(data.subestado,120)&&String(existing.ubicacionActual||'')===short_(data.ubicacionActual,160))return {saved:true,replayed:true};
@@ -264,7 +265,10 @@ function validateWriteHeaders_(name,headers,required) {validateHeaders_(name,hea
 
 function readLists_() {
   const sh=sheet_(SHEETS.LISTAS);const vals=sh.getDataRange().getValues();if(vals.length<2)return {};
-  const headers=vals[0].map(String);const map={};headers.forEach((h,c)=>{map[listKey_(h)]=vals.slice(1).map(r=>String(r[c]||'').trim()).filter(Boolean);});return map;
+  const headers=vals[0].map(String);const map={};headers.forEach((h,c)=>{map[listKey_(h)]=vals.slice(1).map(r=>String(r[c]||'').trim()).filter(Boolean);});
+  map.estadoOperacional=(map.estadoOperacional||[]).filter(v=>['OPERATIVO','FUERA DE SERVICIO'].includes(String(v).trim().toUpperCase()));
+  map.disponibilidad=(map.disponibilidad||[]).filter(v=>['DISPONIBLE','INDISPONIBLE'].includes(String(v).trim().toUpperCase()));
+  return map;
 }
 function listKey_(label) {return ({ESTADO_OPERACIONAL:'estadoOperacional',DISPONIBILIDAD:'disponibilidad',TIPO_NOVEDAD:'tipoNovedad',CRITICIDAD:'criticidad',ESTADO_NOVEDAD:'estadoNovedad'})[String(label).toUpperCase()]||String(label);}
 
@@ -280,6 +284,12 @@ function readObjects_(name) {
 function normalizeCell_(value) {if(value instanceof Date)return value.toISOString();return value===null||value===undefined?'':value;}
 function validateHeaders_(name,headers,required) {const missing=required.filter(x=>headers.indexOf(x)<0);if(missing.length)throw apiError_('HEADERS_INVALID',name+' no tiene los encabezados requeridos: '+missing.join(', '));}
 function primaryKeyForSheet_(name) {return ({MAESTRO_EQUIPOS:'equipoId',ESTADO_ACTUAL:'equipoId',LECTURAS_HOROMETRO:'lecturaId',NOVEDADES:'novedadId',HISTORIAL_ESTADO:'historialId'})[name]||'';}
+function normalizeOperationalState_(state) {
+  if(!state)return null;
+  const operational=String(state.estado||'').trim().toUpperCase(),availability=String(state.disponibilidad||'').trim().toUpperCase();
+  const valid=(operational==='OPERATIVO'&&availability==='DISPONIBLE')||(operational==='FUERA DE SERVICIO'&&availability==='INDISPONIBLE');
+  return valid?state:null;
+}
 function latestStateByEquipment_(rows) {const out={};rows.forEach(x=>{const id=String(x.equipoId||'');if(!id)return;const old=out[id];if(!old||dateMs_(x.fechaHoraActualizacion)>=dateMs_(old.fechaHoraActualizacion))out[id]=x;});return out;}
 function uniqueIndex_(rows,key,sheetName) {const out={};rows.forEach(x=>{const id=String(x[key]||'');if(!id)return;if(out[id])throw apiError_('DUPLICATE_EQUIPMENT_STATE',sheetName+' tiene filas duplicadas para '+id+'.');out[id]=x;});return out;}
 function latestByEquipment_(rows) {const out={};rows.forEach(x=>{const id=String(x.equipoId||'');if(!id||x.horometro===''||x.horometro===null)return;const t=dateMs_(x.fechaHora);const old=out[id];const oldTime=old?dateMs_(old.fechaHora):NaN;const recorded=dateMs_(x.fechaRegistro);const oldRecorded=old?dateMs_(old.fechaRegistro):NaN;if(!old||(!Number.isFinite(oldTime)&&Number.isFinite(t))||(t>oldTime)||(t===oldTime&&recorded>oldRecorded))out[id]=x;});return out;}
