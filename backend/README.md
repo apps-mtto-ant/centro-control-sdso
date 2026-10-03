@@ -6,17 +6,19 @@
 
 Create a staging Apps Script project and set Script Properties:
 
-- `SPREADSHEET_ID`: ID of the staging copy of `BD_CENTRO_CONTROL_SDSO`.
+- `ENVIRONMENT`: must be `staging`.
+- `SPREADSHEET_ID`: ID of the staging workbook; its name must contain `_STG` so writes pass the environment guard.
 - `GOOGLE_CLIENT_ID`: OAuth web client ID used by Google Identity Services in the staging frontend.
-- `ALLOWED_DOMAIN`: Google Workspace domain allowed to consult operational details.
-- `EDITOR_EMAILS`: comma/newline separated addresses allowed to write.
-- `ALLOWED_EMAILS`: required in every mode, including Workspace domains; list the exact Google accounts allowed to consult details. If it is absent or empty, access fails closed.
+- `ALLOWED_DOMAIN`: domain expected for the authorized accounts.
+- `ALLOWED_EMAILS`: required in every mode; exact reader/editor allowlist. If absent or empty, access fails closed.
+- `EDITOR_EMAILS`: comma/newline separated editor addresses; every editor must also be present in `ALLOWED_EMAILS`.
+- `BUILD_ID`: exact deployed source commit SHA, exposed by `health` for deployment verification.
 
 Set the staging origin as an authorized JavaScript origin in the OAuth client. Set `googleClientId` and the staging deployment URL in the staging copy of `js/config.js` only.
 
 After checking that `SPREADSHEET_ID` points to the staging copy, run `prepareV040Schema()` once. It appends `esCritico` to `MAESTRO_EQUIPOS`, `fechaRegistro` and `requestId` to `ESTADO_ACTUAL` and `LECTURAS_HOROMETRO`, and `fechaRegistro`, `requestId`, `fechaRegistroCierre`, `requestIdCierre`, and `usuarioCierre` to `NOVEDADES`. It does not alter existing rows or remove columns. Critical flags remain blank until the historical records have been matched to validated equipment IDs.
 
-Deploy the web app as the staging owner. The Apps Script endpoint may be publicly reachable for sanitized read-only summaries; each detail or write request still validates its Google ID token, audience, domain, and editor email on the server. Do not treat a URL, frontend control, or local role as authentication.
+Deploy the web app as the staging owner. Only `health` is intentionally public. Dashboard/equipment/novelty detail requests require an authorized Google ID token, and writes additionally require the server-side editor allowlist. Do not treat a URL, frontend control, or local role as authentication.
 
 Before enabling forms in staging, verify in a browser that JSON GET/POST works through Apps Script redirects from the staging Pages origin. Then test a lector, a permitted editor, invalid token, invalid equipment, duplicate request, invalid list value, and a decreasing horometer. Keep writes online-only.
 
