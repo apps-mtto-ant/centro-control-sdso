@@ -1,29 +1,13 @@
-const fs = require('node:fs');
-const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 
-const source = fs.readFileSync(__dirname + '/../Code.gs', 'utf8');
+const result = spawnSync(process.execPath, [__dirname + '/smoke.js'], { encoding: 'utf8' });
 
-// AUTH12-1: un encabezado no clave del historial debe estar cubierto por la validación completa.
-assert.match(source, /HISTORY_HEADERS[^\n]+requestId/);
-assert.match(source, /validateHeaders_\(SHEETS\.HISTORIAL_ESTADO,historyTable\.headers,HISTORY_HEADERS\)/);
+if (result.stdout) process.stdout.write(result.stdout);
+if (result.stderr) process.stderr.write(result.stderr);
 
-// AUTH12-2: NO APLICA en cualquiera de los dos campos queda fuera de las listas admitidas.
-assert.match(source, /map\.estadoOperacional=.*OPERATIVO.*FUERA DE SERVICIO/);
-assert.match(source, /map\.disponibilidad=.*DISPONIBLE.*INDISPONIBLE/);
-assert.doesNotMatch(source.match(/map\.estadoOperacional=.*\n/)[0], /NO APLICA/);
-assert.doesNotMatch(source.match(/map\.disponibilidad=.*\n/)[0], /NO APLICA/);
+if (result.status !== 0) process.exit(result.status || 1);
+if (!result.stdout.includes('AUTH12 behavioral matrix')) {
+  throw new Error('La smoke principal no reportó la cobertura de comportamiento AUTH12.');
+}
 
-// AUTH12-3: lectura de datos antiguos. Cualquier par distinto de los dos aprobados se proyecta como Sin estado.
-const helper = source.match(/function normalizeOperationalState_\(state\) \{[\s\S]*?\n\}/);
-assert.ok(helper, 'normalizeOperationalState_ debe existir');
-const normalizeOperationalState_ = Function(helper[0] + '; return normalizeOperationalState_;')();
-assert.equal(normalizeOperationalState_({estado:'OPERATIVO',disponibilidad:'DISPONIBLE'}).estado,'OPERATIVO');
-assert.equal(normalizeOperationalState_({estado:'FUERA DE SERVICIO',disponibilidad:'INDISPONIBLE'}).estado,'FUERA DE SERVICIO');
-assert.equal(normalizeOperationalState_({estado:'NO APLICA',disponibilidad:'INDISPONIBLE'}),null);
-assert.equal(normalizeOperationalState_({estado:'OPERATIVO',disponibilidad:'NO APLICA'}),null);
-assert.equal(normalizeOperationalState_({estado:'NO APLICA',disponibilidad:'NO APLICA'}),null);
-assert.equal(normalizeOperationalState_({estado:'OPERATIVO',disponibilidad:'INDISPONIBLE'}),null);
-assert.equal(normalizeOperationalState_({estado:'FUERA DE SERVICIO',disponibilidad:'DISPONIBLE'}),null);
-
-assert.match(source, /INVALID_STATE_COMBINATION/);
-console.log('AUTH12 state smoke: OK (non-key history header, inverse NO APLICA, legacy data compatibility, closed state matrix)');
+console.log('AUTH12 state smoke: OK (delegada a la smoke conductual principal)');
