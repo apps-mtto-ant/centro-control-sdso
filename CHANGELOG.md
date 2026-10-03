@@ -8,6 +8,9 @@
 - Conciliación SAP calculada desde MAESTRO_EQUIPOS. Se agregan validación/idempotencia de registros y respuesta pública reducida.
 - Captura de vista activa e informe fin de turno con alternativa de impresión/PDF.
 - No habilitar formularios hasta desplegar y validar el backend y el Sheet de staging.
+- AUTH12: matriz de estado cerrada a `OPERATIVO + DISPONIBLE` y `FUERA DE SERVICIO + INDISPONIBLE`; las demás combinaciones se rechazan en backend.
+- AUTH12: `NO APLICA` se elimina de los selectores y de las vistas/KPI. Registros heredados con `NO APLICA` o combinaciones inconsistentes se muestran como **Sin estado** sin modificar `HISTORIAL_ESTADO`.
+- AUTH12: la interfaz mantiene estado y disponibilidad emparejados automáticamente para evitar combinaciones inválidas.
 
 ## v0.3.0 — candidata
 
