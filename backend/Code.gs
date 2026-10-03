@@ -5,7 +5,7 @@
  * ALLOWED_EMAILS y EDITOR_EMAILS. ALLOWED_EMAILS debe enumerar siempre las cuentas autorizadas.
  * Producción exige además EXPECTED_SPREADSHEET_NAME y habilitaciones explícitas para migración/escritura.
  */
-const API_VERSION = '0.4.0-rc7';
+const API_VERSION = '0.4.0-rc8';
 const TOKENINFO_MAX_PER_MINUTE = 30;
 const SHEETS = Object.freeze({
   MAESTRO: 'MAESTRO_EQUIPOS', ESTADO: 'ESTADO_ACTUAL', HOROMETROS: 'LECTURAS_HOROMETRO',
