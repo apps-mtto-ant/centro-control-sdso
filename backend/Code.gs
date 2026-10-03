@@ -80,7 +80,7 @@ function reserveTokeninfoCall_() {
     const minute=Math.floor(Date.now()/60000);
     const [savedMinute,savedCount]=String(props.getProperty('TOKENINFO_RATE_WINDOW')||'').split(':');
     const count=Number(savedMinute)===minute?Number(savedCount)||0:0;
-    if(count>=TOKENINFO_MAX_PER_MINUTE)throw apiError_('AUTH_RATE_LIMITED','Se alcanzó el cantidad máxima de validaciones de inicio de sesión. Espera un minuto e inténtalo nuevamente.');
+    if(count>=TOKENINFO_MAX_PER_MINUTE)throw apiError_('AUTH_RATE_LIMITED','Se alcanzó el límite de validaciones de inicio de sesión. Espera un minuto e inténtalo nuevamente.');
     props.setProperty('TOKENINFO_RATE_WINDOW',String(minute)+':'+String(count+1));
   } catch(error) {
     if(error&&error.code)throw error;
