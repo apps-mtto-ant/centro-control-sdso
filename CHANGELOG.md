@@ -11,6 +11,9 @@
 - AUTH12: matriz de estado cerrada a `OPERATIVO + DISPONIBLE` y `FUERA DE SERVICIO + INDISPONIBLE`; las demás combinaciones se rechazan en backend.
 - AUTH12: `NO APLICA` se elimina de los selectores y de las vistas/KPI. Registros heredados con `NO APLICA` o combinaciones inconsistentes se muestran como **Sin estado** sin modificar `HISTORIAL_ESTADO`.
 - AUTH12: la interfaz mantiene estado y disponibilidad emparejados automáticamente para evitar combinaciones inválidas.
+- AUTH12 rc6: `ALLOWED_EMAILS` es obligatoria en todos los modos; `EDITOR_EMAILS` debe ser subconjunto de la allowlist.
+- AUTH12 rc6: corregido bloqueo de render del frontend (`querySelectorAll` para controles `data-list`), normalización defensiva de snapshots heredados/caché y versión PWA `0.4.0-stg-auth12c`.
+- AUTH12 rc6: smoke principal actualizada a la matriz cerrada con pruebas conductuales de combinaciones cruzadas, datos heredados y encabezado no clave de `HISTORIAL_ESTADO`.
 
 ## v0.3.0 — candidata
 
