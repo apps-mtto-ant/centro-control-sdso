@@ -24,7 +24,7 @@ Before enabling forms in staging, verify in a browser that JSON GET/POST works t
 
 ### Estado operacional AUTH12
 
-Only two persisted combinations are accepted: `OPERATIVO + DISPONIBLE` and `FUERA DE SERVICIO + INDISPONIBLE`. `NO APLICA` is filtered out even if it still exists in the staging `_LISTAS` sheet. Existing `ESTADO_ACTUAL` rows with `NO APLICA` or any non-approved pairing are read as **Sin estado**. Correct the current-state row by registering the real state through the normal write flow; do not edit or delete `HISTORIAL_ESTADO` rows.
+The editor selects only the operational state. Availability is server-derived and persisted as follows: `OPERATIVO` and `STAND BY` → `DISPONIBLE`; `FUERA DE SERVICIO`, `OVERHAUL`, `MANTENCION`, and `FALLA` → `NO DISPONIBLE`. Client-supplied availability is not authoritative. `NO APLICA` is not part of the model. Legacy `INDISPONIBLE` is normalized on read to `NO DISPONIBLE` when its state is recognized; unknown legacy states are read as **Sin estado**. Do not edit or delete `HISTORIAL_ESTADO` rows.
 
 ## Exposed data
 
