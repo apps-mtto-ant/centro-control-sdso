@@ -5,7 +5,7 @@
  * ALLOWED_EMAILS y EDITOR_EMAILS. ALLOWED_EMAILS debe enumerar siempre las cuentas autorizadas;
  * Requiere usar BD_CENTRO_CONTROL_SDSO de staging.
  */
-const API_VERSION = '0.4.0-rc6';
+const API_VERSION = '0.4.0-rc7';
 const TOKENINFO_MAX_PER_MINUTE = 30;
 const SHEETS = Object.freeze({
   MAESTRO: 'MAESTRO_EQUIPOS', ESTADO: 'ESTADO_ACTUAL', HOROMETROS: 'LECTURAS_HOROMETRO',
@@ -167,7 +167,7 @@ function getDashboard_() {
   const byArea={},byModel={},sap={};let available=0,unavailable=0,noState=0;
   items.forEach(x=>{
     const area=x.maestro.areaOperacional||'SIN ÁREA';const a=byArea[area]||(byArea[area]={total:0,disponibles:0,indisponibles:0,sinEstado:0});a.total++;
-    const d=String(x.estadoActual&&x.estadoActual.disponibilidad||'').toUpperCase();if(d==='DISPONIBLE'){available++;a.disponibles++;}else if(d==='INDISPONIBLE'){unavailable++;a.indisponibles++;}else{noState++;a.sinEstado++;}
+    const d=String(x.estadoActual&&x.estadoActual.disponibilidad||'').toUpperCase();if(d==='DISPONIBLE'){available++;a.disponibles++;}else if(d==='NO DISPONIBLE'){unavailable++;a.indisponibles++;}else{noState++;a.sinEstado++;}
     const model=normalizeModel_(x.maestro.modelo||'SIN MODELO');byModel[model]=(byModel[model]||0)+1;
     const validation=x.maestro.estadoValidacionSAP||'SIN ESTADO';sap[validation]=(sap[validation]||0)+1;
   });
@@ -198,23 +198,22 @@ function saveEstado_(data,identity) {
   const clean=validateCommon_(data);const ss=sheet_(SHEETS.ESTADO);const table=readObjects_(SHEETS.ESTADO);validateWriteHeaders_(SHEETS.ESTADO,table.headers,['equipoId','estado','subestado','disponibilidad','ubicacionActual','fechaHoraActualizacion','fuente','usuario','observacion']);
   if(!table.headers.includes('fechaRegistro')||!table.headers.includes('requestId'))throw apiError_('SCHEMA_UPGRADE_REQUIRED','La hoja de estado requiere fechaRegistro y requestId en staging.');
   requireActiveEquipment_(clean.equipoId);
-  const lists=readLists_();requireChoice_(data.estado,lists.estadoOperacional,'estado');requireChoice_(data.disponibilidad,lists.disponibilidad,'disponibilidad');
-  const state=String(data.estado||'').trim().toUpperCase(),availability=String(data.disponibilidad||'').trim().toUpperCase();
-  const validPair=(state==='OPERATIVO'&&availability==='DISPONIBLE')||(state==='FUERA DE SERVICIO'&&availability==='INDISPONIBLE');
-  if(!validPair)throw apiError_('INVALID_STATE_COMBINATION','Solo se permite OPERATIVO + DISPONIBLE o FUERA DE SERVICIO + INDISPONIBLE.');
+  const lists=readLists_();requireChoice_(data.estado,lists.estadoOperacional,'estado');
+  const state=String(data.estado||'').trim().toUpperCase(),availability=availabilityForState_(state);
+  if(!availability)throw apiError_('INVALID_ESTADO','Selecciona un valor vigente para estado.');
   const history=sheet_(SHEETS.HISTORIAL_ESTADO);const historyTable=readObjects_(SHEETS.HISTORIAL_ESTADO);validateHeaders_(SHEETS.HISTORIAL_ESTADO,historyTable.headers,HISTORY_HEADERS);
   const priorHistory=historyTable.rows.find(x=>String(x.requestId||'')===clean.requestId);
-  if(priorHistory&&(String(priorHistory.equipoId)!==clean.equipoId||String(priorHistory.estadoNuevo)!==String(data.estado).trim()||String(priorHistory.disponibilidadNueva)!==String(data.disponibilidad).trim()||dateMs_(priorHistory.fechaHoraOperacional)!==dateMs_(clean.fechaHora)))throw apiError_('REQUEST_ID_CONFLICT','El identificador de solicitud ya fue usado con otros datos.');
+  if(priorHistory&&(String(priorHistory.equipoId)!==clean.equipoId||String(priorHistory.estadoNuevo)!==String(data.estado).trim()||String(priorHistory.disponibilidadNueva)!==availability||dateMs_(priorHistory.fechaHoraOperacional)!==dateMs_(clean.fechaHora)))throw apiError_('REQUEST_ID_CONFLICT','El identificador de solicitud ya fue usado con otros datos.');
   if(priorHistory&&historyTable.rows.some(x=>String(x.equipoId)===clean.equipoId&&x._row>priorHistory._row))return {saved:true,replayed:true,superseded:true};
   const hit=table.rows.filter(x=>String(x.equipoId)===clean.equipoId);if(hit.length>1)throw apiError_('DUPLICATE_EQUIPMENT_STATE','ESTADO_ACTUAL contiene más de una fila para este equipo. Corregir duplicados en staging.');
   const existing=hit[0]||{};
-  if(existing.requestId===clean.requestId&&priorHistory&&String(existing.estado||'')===String(data.estado).trim()&&String(existing.disponibilidad||'')===String(data.disponibilidad).trim()&&dateMs_(existing.fechaHoraActualizacion)===dateMs_(clean.fechaHora)&&String(existing.subestado||'')===short_(data.subestado,120)&&String(existing.ubicacionActual||'')===short_(data.ubicacionActual,160))return {saved:true,replayed:true};
+  if(existing.requestId===clean.requestId&&priorHistory&&String(existing.estado||'')===String(data.estado).trim()&&availabilityForState_(existing.estado)===availability&&dateMs_(existing.fechaHoraActualizacion)===dateMs_(clean.fechaHora)&&String(existing.subestado||'')===short_(data.subestado,120)&&String(existing.ubicacionActual||'')===short_(data.ubicacionActual,160))return {saved:true,replayed:true};
   if(existing.fechaHoraActualizacion&&dateMs_(clean.fechaHora)<dateMs_(existing.fechaHoraActualizacion)&&existing.requestId!==clean.requestId)throw apiError_('STALE_STATE_UPDATE','La fecha ingresada es anterior al estado vigente. Actualiza la fecha antes de guardar.');
   const now=new Date().toISOString();const row=hit.length?hit[0]._row:nextRow_(ss,HEADER_ROW,table.headers,'equipoId');
-  const dataRow=table.headers.map(h=>({equipoId:clean.equipoId,estado:String(data.estado).trim(),subestado:short_(data.subestado,120),disponibilidad:String(data.disponibilidad).trim(),ubicacionActual:short_(data.ubicacionActual,160),horometroActual:existing.horometroActual||'',fechaHoraActualizacion:clean.fechaHora,fuente:'Dashboard SDSO',usuario:identity.email,observacion:short_(data.observacion,1000),fechaRegistro:now,requestId:clean.requestId}[h]??existing[h]??''));
+  const dataRow=table.headers.map(h=>({equipoId:clean.equipoId,estado:String(data.estado).trim(),subestado:short_(data.subestado,120),disponibilidad:availability,ubicacionActual:short_(data.ubicacionActual,160),horometroActual:existing.horometroActual||'',fechaHoraActualizacion:clean.fechaHora,fuente:'Dashboard SDSO',usuario:identity.email,observacion:short_(data.observacion,1000),fechaRegistro:now,requestId:clean.requestId}[h]??existing[h]??''));
   if(!priorHistory){
     const recovered=existing.requestId===clean.requestId;
-    appendByHeaders_(history,historyTable.headers,{historialId:Utilities.getUuid(),fechaRegistro:now,fechaHoraOperacional:clean.fechaHora,equipoId:clean.equipoId,estadoAnterior:recovered?'DESCONOCIDO (RECUPERADO)':short_(existing.estado,120),disponibilidadAnterior:recovered?'DESCONOCIDA (RECUPERADA)':short_(existing.disponibilidad,80),estadoNuevo:String(data.estado).trim(),disponibilidadNueva:String(data.disponibilidad).trim(),subestadoNuevo:short_(data.subestado,120),ubicacionNueva:short_(data.ubicacionActual,160),usuario:identity.email,requestId:clean.requestId,observacion:short_(data.observacion,1000)});
+    appendByHeaders_(history,historyTable.headers,{historialId:Utilities.getUuid(),fechaRegistro:now,fechaHoraOperacional:clean.fechaHora,equipoId:clean.equipoId,estadoAnterior:recovered?'DESCONOCIDO (RECUPERADO)':short_(existing.estado,120),disponibilidadAnterior:recovered?'DESCONOCIDA (RECUPERADA)':short_(existing.disponibilidad,80),estadoNuevo:String(data.estado).trim(),disponibilidadNueva:availability,subestadoNuevo:short_(data.subestado,120),ubicacionNueva:short_(data.ubicacionActual,160),usuario:identity.email,requestId:clean.requestId,observacion:short_(data.observacion,1000)});
   }
   table.headers.forEach((header,index)=>ss.getRange(row,index+1).setValue(dataRow[index]));
   return {saved:true,replayed:Boolean(priorHistory),equipoId:clean.equipoId,fechaRegistro:now};
@@ -266,8 +265,8 @@ function validateWriteHeaders_(name,headers,required) {validateHeaders_(name,hea
 function readLists_() {
   const sh=sheet_(SHEETS.LISTAS);const vals=sh.getDataRange().getValues();if(vals.length<2)return {};
   const headers=vals[0].map(String);const map={};headers.forEach((h,c)=>{map[listKey_(h)]=vals.slice(1).map(r=>String(r[c]||'').trim()).filter(Boolean);});
-  map.estadoOperacional=(map.estadoOperacional||[]).filter(v=>['OPERATIVO','FUERA DE SERVICIO'].includes(String(v).trim().toUpperCase()));
-  map.disponibilidad=(map.disponibilidad||[]).filter(v=>['DISPONIBLE','INDISPONIBLE'].includes(String(v).trim().toUpperCase()));
+  map.estadoOperacional=(map.estadoOperacional||[]).filter(v=>['OPERATIVO','STAND BY','FUERA DE SERVICIO','OVERHAUL','MANTENCION','FALLA'].includes(String(v).trim().toUpperCase()));
+  map.disponibilidad=(map.disponibilidad||[]).filter(v=>['DISPONIBLE','NO DISPONIBLE'].includes(String(v).trim().toUpperCase()));
   return map;
 }
 function listKey_(label) {return ({ESTADO_OPERACIONAL:'estadoOperacional',DISPONIBILIDAD:'disponibilidad',TIPO_NOVEDAD:'tipoNovedad',CRITICIDAD:'criticidad',ESTADO_NOVEDAD:'estadoNovedad'})[String(label).toUpperCase()]||String(label);}
@@ -284,11 +283,16 @@ function readObjects_(name) {
 function normalizeCell_(value) {if(value instanceof Date)return value.toISOString();return value===null||value===undefined?'':value;}
 function validateHeaders_(name,headers,required) {const missing=required.filter(x=>headers.indexOf(x)<0);if(missing.length)throw apiError_('HEADERS_INVALID',name+' no tiene los encabezados requeridos: '+missing.join(', '));}
 function primaryKeyForSheet_(name) {return ({MAESTRO_EQUIPOS:'equipoId',ESTADO_ACTUAL:'equipoId',LECTURAS_HOROMETRO:'lecturaId',NOVEDADES:'novedadId',HISTORIAL_ESTADO:'historialId'})[name]||'';}
+function availabilityForState_(state) {
+  const operational=String(state||'').trim().toUpperCase();
+  if(['OPERATIVO','STAND BY'].includes(operational))return 'DISPONIBLE';
+  if(['FUERA DE SERVICIO','OVERHAUL','MANTENCION','FALLA'].includes(operational))return 'NO DISPONIBLE';
+  return '';
+}
 function normalizeOperationalState_(state) {
   if(!state)return null;
-  const operational=String(state.estado||'').trim().toUpperCase(),availability=String(state.disponibilidad||'').trim().toUpperCase();
-  const valid=(operational==='OPERATIVO'&&availability==='DISPONIBLE')||(operational==='FUERA DE SERVICIO'&&availability==='INDISPONIBLE');
-  return valid?state:null;
+  const availability=availabilityForState_(state.estado);if(!availability)return null;
+  return Object.assign({},state,{disponibilidad:availability});
 }
 function latestStateByEquipment_(rows) {const out={};rows.forEach(x=>{const id=String(x.equipoId||'');if(!id)return;const old=out[id];if(!old||dateMs_(x.fechaHoraActualizacion)>=dateMs_(old.fechaHoraActualizacion))out[id]=x;});return out;}
 function uniqueIndex_(rows,key,sheetName) {const out={};rows.forEach(x=>{const id=String(x[key]||'');if(!id)return;if(out[id])throw apiError_('DUPLICATE_EQUIPMENT_STATE',sheetName+' tiene filas duplicadas para '+id+'.');out[id]=x;});return out;}
