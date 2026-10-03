@@ -20,6 +20,10 @@ Deploy the web app as the staging owner. The Apps Script endpoint may be publicl
 
 Before enabling forms in staging, verify in a browser that JSON GET/POST works through Apps Script redirects from the staging Pages origin. Then test a lector, a permitted editor, invalid token, invalid equipment, duplicate request, invalid list value, and a decreasing horometer. Keep writes online-only.
 
+### Estado operacional AUTH12
+
+Only two persisted combinations are accepted: `OPERATIVO + DISPONIBLE` and `FUERA DE SERVICIO + INDISPONIBLE`. `NO APLICA` is filtered out even if it still exists in the staging `_LISTAS` sheet. Existing `ESTADO_ACTUAL` rows with `NO APLICA` or any non-approved pairing are read as **Sin estado**. Correct the current-state row by registering the real state through the normal write flow; do not edit or delete `HISTORIAL_ESTADO` rows.
+
 ## Exposed data
 
 `health` and `getDashboardCompresores` return only the fields needed for counts, area status, horometers, inventory, and SAP counts. They exclude user emails and free-text observations/descriptions. `getNovedades` requires a valid domain session and returns details without the author's email. Writes require the server-side editor allowlist.
