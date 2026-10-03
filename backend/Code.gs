@@ -6,7 +6,8 @@
  * cuentas autorizadas, ya que Gmail no entrega un hosted domain de Workspace.
  * Requiere usar BD_CENTRO_CONTROL_SDSO de staging.
  */
-const API_VERSION = '0.4.0-rc2';
+const API_VERSION = '0.4.0-rc3';
+const TOKENINFO_MAX_PER_MINUTE = 30;
 const SHEETS = Object.freeze({
   MAESTRO: 'MAESTRO_EQUIPOS', ESTADO: 'ESTADO_ACTUAL', HOROMETROS: 'LECTURAS_HOROMETRO',
   NOVEDADES: 'NOVEDADES', LISTAS: '_LISTAS', CONCILIACION: 'CONCILIACION', HISTORIAL_ESTADO: 'HISTORIAL_ESTADO'
@@ -71,6 +72,24 @@ function authenticate_(token) {
   return {email:user.email,role:isEditor_(user.email)?'EDITOR':'LECTOR'};
 }
 
+function reserveTokeninfoCall_() {
+  const lock=LockService.getScriptLock();
+  try {
+    lock.waitLock(5000);
+    const props=PropertiesService.getScriptProperties();
+    const minute=Math.floor(Date.now()/60000);
+    const [savedMinute,savedCount]=String(props.getProperty('TOKENINFO_RATE_WINDOW')||'').split(':');
+    const count=Number(savedMinute)===minute?Number(savedCount)||0:0;
+    if(count>=TOKENINFO_MAX_PER_MINUTE)throw apiError_('AUTH_RATE_LIMITED','Se alcanzó el cantidad máxima de validaciones de inicio de sesión. Espera un minuto e inténtalo nuevamente.');
+    props.setProperty('TOKENINFO_RATE_WINDOW',String(minute)+':'+String(count+1));
+  } catch(error) {
+    if(error&&error.code)throw error;
+    throw apiError_('AUTH_RATE_LIMITED','El servicio de validación está ocupado. Espera un minuto e inténtalo nuevamente.');
+  } finally {
+    try { lock.releaseLock(); } catch(_) {}
+  }
+}
+
 function verifyIdentity_(token) {
   if (!token || String(token).length < 40) throw apiError_('AUTH_REQUIRED','Inicia sesión para continuar.');
   const props = PropertiesService.getScriptProperties();
@@ -80,7 +99,7 @@ function verifyIdentity_(token) {
   if (!clientId || !domain || (domain === 'gmail.com' && !allowedEmails.length)) throw apiError_('AUTH_NOT_CONFIGURED','La autenticación de staging aún no está configurada.');
   const claims=cheapJwtClaims_(String(token),clientId);
   const cache=CacheService.getScriptCache();const cacheKey='identity:'+sha256Hex_(String(token));let result=null;const cached=cache.get(cacheKey);if(cached){try{result=JSON.parse(cached);}catch(_){}}
-  if(!result){const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token);try {const res = UrlFetchApp.fetch(url,{method:'get',muteHttpExceptions:true});if (res.getResponseCode() !== 200) throw new Error('tokeninfo rechazó la credencial');result = JSON.parse(res.getContentText());} catch (err) { throw apiError_('AUTH_INVALID','La sesión de Google no es válida o expiró.'); }}
+  if(!result){reserveTokeninfoCall_();const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token);try {const res = UrlFetchApp.fetch(url,{method:'get',muteHttpExceptions:true});if (res.getResponseCode() !== 200) throw new Error('tokeninfo rechazó la credencial');result = JSON.parse(res.getContentText());} catch (err) { throw apiError_('AUTH_INVALID','La sesión de Google no es válida o expiró.'); }}
   const email = String(result.email || '').trim().toLowerCase();
   const aud = String(result.aud || '');
   const hostedDomain = String(result.hd || '').toLowerCase();
