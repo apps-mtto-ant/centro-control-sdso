@@ -1,6 +1,25 @@
-# Backend v0.4 — staging
+# Backend v0.4 — staging y producción segura
 
-`Code.gs` is the candidate for a **separate Apps Script deployment** connected to a copied staging Sheet. Do not paste it into or redeploy the v0.3 production Apps Script project.
+`Code.gs` is the v0.4 backend source. Staging and production must use **separate Apps Script projects/deployments**. Never overwrite or redeploy the v0.3 production Apps Script before the v0.4 cutover, because v0.3 does not use the authenticated v0.4 contract.
+
+## Production cutover guardrails
+
+For the new v0.4 production Apps Script project use:
+
+- `ENVIRONMENT=production`
+- `SPREADSHEET_ID`: production `BD_CENTRO_CONTROL_SDSO`
+- `EXPECTED_SPREADSHEET_NAME=BD_CENTRO_CONTROL_SDSO`
+- `GOOGLE_CLIENT_ID`: OAuth web client authorized for the production GitHub Pages origin
+- `ALLOWED_DOMAIN`
+- `ALLOWED_EMAILS`
+- `EDITOR_EMAILS`
+- `BUILD_ID`: exact frozen release commit
+- `PRODUCTION_SCHEMA_MIGRATION_ENABLED=false` initially
+- `PRODUCTION_WRITES_ENABLED=false` initially
+
+The backend may read production while both production flags are false. Schema changes require setting `PRODUCTION_SCHEMA_MIGRATION_ENABLED=true` only for the controlled migration window. Operational writes remain blocked until `PRODUCTION_WRITES_ENABLED=true` at cutover.
+
+The production spreadsheet must not contain `_STG` in its name and must exactly match `EXPECTED_SPREADSHEET_NAME`.
 
 ## Configuration
 
