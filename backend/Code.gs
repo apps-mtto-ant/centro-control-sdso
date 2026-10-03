@@ -6,7 +6,7 @@
  * cuentas autorizadas, ya que Gmail no entrega un hosted domain de Workspace.
  * Requiere usar BD_CENTRO_CONTROL_SDSO de staging.
  */
-const API_VERSION = '0.4.0-rc3';
+const API_VERSION = '0.4.0-rc4';
 const TOKENINFO_MAX_PER_MINUTE = 30;
 const SHEETS = Object.freeze({
   MAESTRO: 'MAESTRO_EQUIPOS', ESTADO: 'ESTADO_ACTUAL', HOROMETROS: 'LECTURAS_HOROMETRO',
@@ -26,7 +26,7 @@ function doGet(e) {
   try {
     const action = String(e && e.parameter && e.parameter.action || 'health').trim();
     let data;
-    if (action === 'health') data = {service:'Centro de Control SDSO',status:'ok',mode:'authenticated-summary-editor-write',environment:String(PropertiesService.getScriptProperties().getProperty('ENVIRONMENT')||'unconfigured'),requiredSheets:[SHEETS.MAESTRO,SHEETS.ESTADO,SHEETS.HOROMETROS,SHEETS.NOVEDADES,SHEETS.HISTORIAL_ESTADO]};
+    if (action === 'health') data = {service:'Centro de Control SDSO',status:'ok',mode:'authenticated-summary-editor-write',environment:String(PropertiesService.getScriptProperties().getProperty('ENVIRONMENT')||'unconfigured'),buildId:String(PropertiesService.getScriptProperties().getProperty('BUILD_ID')||'UNSET'),requiredSheets:[SHEETS.MAESTRO,SHEETS.ESTADO,SHEETS.HOROMETROS,SHEETS.NOVEDADES,SHEETS.HISTORIAL_ESTADO]};
     else if (action === 'getEquipos' || action === 'getDashboardCompresores') throw apiError_('AUTH_REQUIRED','Inicia sesión para consultar los datos.');
     else return response_({ok:false,error:{code:'ACTION_NOT_FOUND',message:'Acción no reconocida.'}});
     return response_({ok:true,apiVersion:API_VERSION,serverTime:new Date().toISOString(),elapsedMs:Date.now()-started,data,error:null});
@@ -72,16 +72,17 @@ function authenticate_(token) {
   return {email:user.email,role:isEditor_(user.email)?'EDITOR':'LECTOR'};
 }
 
-function reserveTokeninfoCall_() {
+function reserveTokeninfoCall_(email) {
+  const identityKey='TOKENINFO_RATE_'+sha256Hex_(String(email||'').toLowerCase());
   const lock=LockService.getScriptLock();
   try {
     lock.waitLock(5000);
     const props=PropertiesService.getScriptProperties();
     const minute=Math.floor(Date.now()/60000);
-    const [savedMinute,savedCount]=String(props.getProperty('TOKENINFO_RATE_WINDOW')||'').split(':');
+    const [savedMinute,savedCount]=String(props.getProperty(identityKey)||'').split(':');
     const count=Number(savedMinute)===minute?Number(savedCount)||0:0;
-    if(count>=TOKENINFO_MAX_PER_MINUTE)throw apiError_('AUTH_RATE_LIMITED','Se alcanzó el límite de validaciones de inicio de sesión. Espera un minuto e inténtalo nuevamente.');
-    props.setProperty('TOKENINFO_RATE_WINDOW',String(minute)+':'+String(count+1));
+    if(count>=TOKENINFO_MAX_PER_MINUTE)throw apiError_('AUTH_RATE_LIMITED','Se alcanzó el límite de validaciones para esta cuenta. Espera un minuto e inténtalo nuevamente.');
+    props.setProperty(identityKey,String(minute)+':'+String(count+1));
   } catch(error) {
     if(error&&error.code)throw error;
     throw apiError_('AUTH_RATE_LIMITED','El servicio de validación está ocupado. Espera un minuto e inténtalo nuevamente.');
@@ -89,7 +90,14 @@ function reserveTokeninfoCall_() {
     try { lock.releaseLock(); } catch(_) {}
   }
 }
-
+function identityHintAllowed_(claims,domain,allowedEmails) {
+  const email=String(claims.email||'').trim().toLowerCase();
+  if(!email||!email.includes('@'))return false;
+  const emailDomain=email.split('@').pop();
+  if(domain==='gmail.com')return emailDomain==='gmail.com'&&allowedEmails.indexOf(email)>=0;
+  const hostedDomain=String(claims.hd||'').toLowerCase();
+  return emailDomain===domain&&hostedDomain===domain&&(!allowedEmails.length||allowedEmails.indexOf(email)>=0);
+}
 function verifyIdentity_(token) {
   if (!token || String(token).length < 40) throw apiError_('AUTH_REQUIRED','Inicia sesión para continuar.');
   const props = PropertiesService.getScriptProperties();
@@ -98,8 +106,10 @@ function verifyIdentity_(token) {
   const allowedEmails = String(props.getProperty('ALLOWED_EMAILS') || '').split(/[\n,;]/).map(x=>x.trim().toLowerCase()).filter(Boolean);
   if (!clientId || !domain || (domain === 'gmail.com' && !allowedEmails.length)) throw apiError_('AUTH_NOT_CONFIGURED','La autenticación de staging aún no está configurada.');
   const claims=cheapJwtClaims_(String(token),clientId);
+  if(!identityHintAllowed_(claims,domain,allowedEmails))throw apiError_('ACCESS_DENIED','La cuenta no pertenece al dominio autorizado.');
+  const claimedEmail=String(claims.email).trim().toLowerCase();
   const cache=CacheService.getScriptCache();const cacheKey='identity:'+sha256Hex_(String(token));let result=null;const cached=cache.get(cacheKey);if(cached){try{result=JSON.parse(cached);}catch(_){}}
-  if(!result){reserveTokeninfoCall_();const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token);try {const res = UrlFetchApp.fetch(url,{method:'get',muteHttpExceptions:true});if (res.getResponseCode() !== 200) throw new Error('tokeninfo rechazó la credencial');result = JSON.parse(res.getContentText());} catch (err) { throw apiError_('AUTH_INVALID','La sesión de Google no es válida o expiró.'); }}
+  if(!result){reserveTokeninfoCall_(claimedEmail);const url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(token);try {const res = UrlFetchApp.fetch(url,{method:'get',muteHttpExceptions:true});if (res.getResponseCode() !== 200) throw new Error('tokeninfo rechazó la credencial');result = JSON.parse(res.getContentText());} catch (err) { throw apiError_('AUTH_INVALID','La sesión de Google no es válida o expiró.'); }}
   const email = String(result.email || '').trim().toLowerCase();
   const aud = String(result.aud || '');
   const hostedDomain = String(result.hd || '').toLowerCase();
@@ -109,7 +119,7 @@ function verifyIdentity_(token) {
   const identityAllowed = domain === 'gmail.com'
     ? emailDomain === 'gmail.com' && allowedEmails.indexOf(email) >= 0
     : emailDomain === domain && hostedDomain === domain && (!allowedEmails.length || allowedEmails.indexOf(email) >= 0);
-  if (aud !== clientId || !verified || !email || !identityAllowed || issuer!=='https://accounts.google.com' && issuer!=='accounts.google.com') {
+  if (aud !== clientId || !verified || !email || email!==claimedEmail || !identityAllowed || issuer!=='https://accounts.google.com' && issuer!=='accounts.google.com') {
     throw apiError_('ACCESS_DENIED','La cuenta no pertenece al dominio autorizado.');
   }
   const identity={email:email};const ttl=Math.min(300,Math.max(1,Number(claims.exp)-Math.floor(Date.now()/1000)));cache.put(cacheKey,JSON.stringify(result),ttl);return identity;
@@ -190,21 +200,22 @@ function saveEstado_(data,identity) {
   if(!table.headers.includes('fechaRegistro')||!table.headers.includes('requestId'))throw apiError_('SCHEMA_UPGRADE_REQUIRED','La hoja de estado requiere fechaRegistro y requestId en staging.');
   requireActiveEquipment_(clean.equipoId);
   requireChoice_(data.estado,readLists_().estadoOperacional,'estado');requireChoice_(data.disponibilidad,readLists_().disponibilidad,'disponibilidad');
+  const history=sheet_(SHEETS.HISTORIAL_ESTADO);const historyTable=readObjects_(SHEETS.HISTORIAL_ESTADO);validateHeaders_(SHEETS.HISTORIAL_ESTADO,historyTable.headers,HISTORY_HEADERS);
+  const priorHistory=historyTable.rows.find(x=>String(x.requestId||'')===clean.requestId);
+  if(priorHistory&&(String(priorHistory.equipoId)!==clean.equipoId||String(priorHistory.estadoNuevo)!==String(data.estado).trim()||String(priorHistory.disponibilidadNueva)!==String(data.disponibilidad).trim()||dateMs_(priorHistory.fechaHoraOperacional)!==dateMs_(clean.fechaHora)))throw apiError_('REQUEST_ID_CONFLICT','El identificador de solicitud ya fue usado con otros datos.');
   const hit=table.rows.filter(x=>String(x.equipoId)===clean.equipoId);if(hit.length>1)throw apiError_('DUPLICATE_EQUIPMENT_STATE','ESTADO_ACTUAL contiene más de una fila para este equipo. Corregir duplicados en staging.');
-  const now=new Date().toISOString();const row=hit.length?hit[0]._row:nextRow_(ss,HEADER_ROW,table.headers,'equipoId');
   const existing=hit[0]||{};
-  if(existing.requestId&&existing.requestId===clean.requestId)return {saved:true,replayed:true};
-  if(existing.fechaHoraActualizacion&&dateMs_(clean.fechaHora)<dateMs_(existing.fechaHoraActualizacion))throw apiError_('STALE_STATE_UPDATE','La fecha ingresada es anterior al estado vigente. Actualiza la fecha antes de guardar.');
-  const dataRow=table.headers.map(h=>({
-    equipoId:clean.equipoId,estado:String(data.estado).trim(),subestado:short_(data.subestado,120),disponibilidad:String(data.disponibilidad).trim(),ubicacionActual:short_(data.ubicacionActual,160),
-    horometroActual:existing.horometroActual||'',fechaHoraActualizacion:clean.fechaHora,fuente:'Dashboard SDSO',usuario:identity.email,observacion:short_(data.observacion,1000),fechaRegistro:now,requestId:clean.requestId
-  }[h]??existing[h]??''));
+  if(existing.requestId===clean.requestId&&priorHistory&&String(existing.estado||'')===String(data.estado).trim()&&String(existing.disponibilidad||'')===String(data.disponibilidad).trim()&&dateMs_(existing.fechaHoraActualizacion)===dateMs_(clean.fechaHora)&&String(existing.subestado||'')===short_(data.subestado,120)&&String(existing.ubicacionActual||'')===short_(data.ubicacionActual,160))return {saved:true,replayed:true};
+  if(existing.fechaHoraActualizacion&&dateMs_(clean.fechaHora)<dateMs_(existing.fechaHoraActualizacion)&&existing.requestId!==clean.requestId)throw apiError_('STALE_STATE_UPDATE','La fecha ingresada es anterior al estado vigente. Actualiza la fecha antes de guardar.');
+  const now=new Date().toISOString();const row=hit.length?hit[0]._row:nextRow_(ss,HEADER_ROW,table.headers,'equipoId');
+  const dataRow=table.headers.map(h=>({equipoId:clean.equipoId,estado:String(data.estado).trim(),subestado:short_(data.subestado,120),disponibilidad:String(data.disponibilidad).trim(),ubicacionActual:short_(data.ubicacionActual,160),horometroActual:existing.horometroActual||'',fechaHoraActualizacion:clean.fechaHora,fuente:'Dashboard SDSO',usuario:identity.email,observacion:short_(data.observacion,1000),fechaRegistro:now,requestId:clean.requestId}[h]??existing[h]??''));
+  if(!priorHistory){
+    const recovered=existing.requestId===clean.requestId;
+    appendByHeaders_(history,historyTable.headers,{historialId:Utilities.getUuid(),fechaRegistro:now,fechaHoraOperacional:clean.fechaHora,equipoId:clean.equipoId,estadoAnterior:recovered?'DESCONOCIDO (RECUPERADO)':short_(existing.estado,120),disponibilidadAnterior:recovered?'DESCONOCIDA (RECUPERADA)':short_(existing.disponibilidad,80),estadoNuevo:String(data.estado).trim(),disponibilidadNueva:String(data.disponibilidad).trim(),subestadoNuevo:short_(data.subestado,120),ubicacionNueva:short_(data.ubicacionActual,160),usuario:identity.email,requestId:clean.requestId,observacion:short_(data.observacion,1000)});
+  }
   table.headers.forEach((header,index)=>ss.getRange(row,index+1).setValue(dataRow[index]));
-  const history=sheet_(SHEETS.HISTORIAL_ESTADO);const historyHeaders=history.getRange(HEADER_ROW,1,1,history.getLastColumn()).getDisplayValues()[0].map(x=>String(x).trim());validateHeaders_(SHEETS.HISTORIAL_ESTADO,historyHeaders,HISTORY_HEADERS);
-  appendByHeaders_(history,historyHeaders,{historialId:Utilities.getUuid(),fechaRegistro:now,fechaHoraOperacional:clean.fechaHora,equipoId:clean.equipoId,estadoAnterior:short_(existing.estado,120),disponibilidadAnterior:short_(existing.disponibilidad,80),estadoNuevo:String(data.estado).trim(),disponibilidadNueva:String(data.disponibilidad).trim(),subestadoNuevo:short_(data.subestado,120),ubicacionNueva:short_(data.ubicacionActual,160),usuario:identity.email,requestId:clean.requestId,observacion:short_(data.observacion,1000)});
-  return {saved:true,equipoId:clean.equipoId,fechaRegistro:now};
+  return {saved:true,replayed:Boolean(priorHistory),equipoId:clean.equipoId,fechaRegistro:now};
 }
-
 function saveHorometro_(data,identity) {
   const clean=validateCommon_(data);if(data.horometro===null||data.horometro===undefined||String(data.horometro).trim()==='')throw apiError_('INVALID_HOURMETER','Ingresa un horómetro válido.');const reading=Number(data.horometro);if(!Number.isFinite(reading)||reading<0||reading>10000000)throw apiError_('INVALID_HOURMETER','Ingresa un horómetro válido.');
   requireActiveEquipment_(clean.equipoId);const ss=sheet_(SHEETS.HOROMETROS);const table=readObjects_(SHEETS.HOROMETROS);validateWriteHeaders_(SHEETS.HOROMETROS,table.headers,['lecturaId','fechaHora','equipoId','horometro','unidad','origen','usuario','observacion']);

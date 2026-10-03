@@ -36,6 +36,7 @@ const tables = {
   ]
 };
 
+let failHistoryAppend=false,failStateRequestIdOnce=false;
 class FakeSheet {
   constructor(name, values) { this.name=name; this.values=values.map(r=>r.slice()); }
   getName(){return this.name;}
@@ -47,8 +48,8 @@ class FakeSheet {
     return {
       getValues:()=>Array.from({length:height},(_,y)=>Array.from({length:width},(_,x)=>this.values[row-1+y]?.[col-1+x]??'')),
       getDisplayValues:()=>Array.from({length:height},(_,y)=>Array.from({length:width},(_,x)=>String(this.values[row-1+y]?.[col-1+x]??''))),
-      setValue:value=>{while(this.values.length<row)this.values.push([]);this.values[row-1][col-1]=value;},
-      setValues:values=>values.forEach((arr,y)=>{while(this.values.length<row+y)this.values.push([]);for(let x=0;x<arr.length;x++)this.values[row-1+y][col-1+x]=arr[x];})
+      setValue:value=>{if(this.name==='ESTADO_ACTUAL'&&this.values[3]?.[col-1]==='requestId'&&failStateRequestIdOnce){failStateRequestIdOnce=false;throw new Error('simulated state write failure');}while(this.values.length<row)this.values.push([]);this.values[row-1][col-1]=value;},
+      setValues:values=>{if(this.name==='HISTORIAL_ESTADO'&&failHistoryAppend){failHistoryAppend=false;throw new Error('simulated history append failure');}values.forEach((arr,y)=>{while(this.values.length<row+y)this.values.push([]);for(let x=0;x<arr.length;x++)this.values[row-1+y][col-1+x]=arr[x];});}
     };
   }
 }
@@ -68,7 +69,7 @@ function tokenInfo(token){
 }
 const context={
   console:{log:console.log,warn:console.warn,error(){}},Date,JSON,Math,Number,String,Object,Array,RegExp,Error,encodeURIComponent,
-  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||''})},
+  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]||'',setProperty:(k,v)=>{props[k]=String(v);},deleteProperty:k=>{delete props[k];}})},
   UrlFetchApp:{fetch:url=>{tokenInfoCalls++;const token=new URL(url).searchParams.get('id_token');const info=tokenInfo(token);return {getResponseCode:()=>info?200:401,getContentText:()=>JSON.stringify(info||{})};}},
   CacheService:{getScriptCache:()=>({get:k=>tokenCache.get(k)||null,put:(k,v)=>tokenCache.set(k,v)})},
   SpreadsheetApp:{openById:id=>{assert.equal(id,'staging-id');return {getName:()=>targetSpreadsheetName,getSheetByName:n=>sheets[n]||null,insertSheet:n=>{const sh=new FakeSheet(n,[[],[],[],[]]);sheets[n]=sh;return sh;}};}},
@@ -86,6 +87,7 @@ assert.ok(sheets.NOVEDADES.values[3].includes('requestIdCierre'));
 assert.ok(sheets.HISTORIAL_ESTADO.values[3].includes('historialId'));
 const publicHealth=body(context.doGet({parameter:{action:'health'}}));
 assert.equal(publicHealth.ok,true);
+assert.equal(publicHealth.data.buildId,'UNSET');
 assert.equal(publicHealth.data.mode,'authenticated-summary-editor-write');
 const anonymousDashboard=body(context.doGet({parameter:{action:'getDashboardCompresores'}}));
 assert.equal(anonymousDashboard.error.code,'AUTH_REQUIRED');
@@ -95,6 +97,11 @@ const anonymousPost=body(context.doPost({postData:{contents:JSON.stringify({acti
 assert.equal(anonymousPost.error.code,'AUTH_REQUIRED');
 const beforeGarbage=tokenInfoCalls;for(let i=0;i<50;i++)body(context.doPost({postData:{contents:JSON.stringify({action:'getDashboardCompresores',idToken:`garbage-token-${i}-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`})}}));
 assert.equal(tokenInfoCalls,beforeGarbage,'malformed anonymous tokens are rejected before tokeninfo');
+const forgedToken=i=>`e30.${Buffer.from(JSON.stringify({aud:'client-id',iss:'https://accounts.google.com',exp:Math.floor(Date.now()/1000)+3600,email:'editor@gmail.com'})).toString('base64url')}.forged${i}`;
+const beforeForged=tokenInfoCalls;for(let i=0;i<31;i++){const r=body(context.doPost({postData:{contents:JSON.stringify({action:'authenticate',idToken:forgedToken(i)})}}));if(i<30)assert.equal(r.error.code,'AUTH_INVALID');else assert.equal(r.error.code,'AUTH_RATE_LIMITED');}
+assert.equal(tokenInfoCalls-beforeForged,30,'forged tokens can spend only the claimed authorized identity quota');
+const readerUnaffected=body(context.doPost({postData:{contents:JSON.stringify({action:'authenticate',idToken:READER_TOKEN})}}));assert.equal(readerUnaffected.ok,true,'one identity rate limit does not block other authorized users');
+props['TOKENINFO_RATE_'+context.sha256Hex_('editor@gmail.com')]=undefined;
 const snapshot=body(context.doPost({postData:{contents:JSON.stringify({action:'getDashboardCompresores',idToken:READER_TOKEN})}}));
 assert.equal(snapshot.ok,true);
 assert.equal(snapshot.data.equipos.length,2);
@@ -120,8 +127,11 @@ assert.equal(details.data.novedades.length,1);
 assert.equal(JSON.stringify(details).includes('private@example.com'),false,'authenticated novelty response still omits author email');
 const outsider=body(context.doPost({postData:{contents:JSON.stringify({action:'getNovedades',idToken:OUTSIDER_TOKEN})}}));
 assert.equal(outsider.error.code,'ACCESS_DENIED','consumer Gmail access is limited to the exact allowlist');
+failHistoryAppend=true;const historyFailure=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'state-history-fail',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'}})}}));assert.equal(historyFailure.error.code,'INTERNAL_ERROR');assert.equal(sheets.ESTADO_ACTUAL.values[4][sheets.ESTADO_ACTUAL.values[3].indexOf('requestId')],'','state is not changed when history append fails');
+failStateRequestIdOnce=true;const partialState=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'state-request-1',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'}})}}));assert.equal(partialState.error.code,'INTERNAL_ERROR');
 const status=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'state-request-1',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'}})}}));
-assert.equal(status.ok,true);
+assert.equal(status.ok,true,'retry completes state after history was written');
+assert.equal(sheets.HISTORIAL_ESTADO.values.filter(r=>r[sheets.HISTORIAL_ESTADO.values[3].indexOf('requestId')]==='state-request-1').length,1,'retry does not duplicate history');
 assert.equal(sheets.HISTORIAL_ESTADO.values[4][sheets.HISTORIAL_ESTADO.values[3].indexOf('requestId')],'state-request-1','state changes append to audit history');
 props.ENVIRONMENT='production';const blocked=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:EDITOR_TOKEN,data:{requestId:'blocked-write',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',tipo:'FALLA',criticidad:'ALTA',descripcion:'No debe guardar'}})}}));assert.equal(blocked.error.code,'WRITE_ENVIRONMENT_BLOCKED');props.ENVIRONMENT='staging';
 targetSpreadsheetName='BD_CENTRO_CONTROL_SDSO';const wrongBook=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:EDITOR_TOKEN,data:{requestId:'wrong-book-write',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',tipo:'FALLA',criticidad:'ALTA',descripcion:'No debe guardar'}})}}));assert.equal(wrongBook.error.code,'WRITE_TARGET_BLOCKED');targetSpreadsheetName='BD_CENTRO_CONTROL_SDSO_STG_v0.4';
