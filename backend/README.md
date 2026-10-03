@@ -24,7 +24,7 @@ Before enabling forms in staging, verify in a browser that JSON GET/POST works t
 
 ### Estado operacional AUTH12
 
-The editor selects only the operational state. Availability is server-derived and persisted as follows: `OPERATIVO` and `STAND BY` → `DISPONIBLE`; `FUERA DE SERVICIO`, `OVERHAUL`, `MANTENCION`, and `FALLA` → `NO DISPONIBLE`. Client-supplied availability is not authoritative. `NO APLICA` is not part of the model. Legacy `INDISPONIBLE` is normalized on read to `NO DISPONIBLE` when its state is recognized; unknown legacy states are read as **Sin estado**. Do not edit or delete `HISTORIAL_ESTADO` rows.
+The editor selects only the operational state. Availability is server-derived and persisted as follows: `OPERATIVO` and `STAND BY` → `DISPONIBLE`; `FUERA DE SERVICIO`, `OVERHAUL`, `MANTENCION`, and `FALLA` → `NO DISPONIBLE`. Client-supplied availability is not authoritative. For legacy rows, a recognized operational state is authoritative even when the stored availability contradicts it; reads return the canonical derived availability without rewriting the sheet. Unknown legacy states are read as **Sin estado**. `NO APLICA` is not part of the model. `_LISTAS.ESTADO_OPERACIONAL` must contain the six canonical states; `_LISTAS.DISPONIBILIDAD` should contain `DISPONIBLE` and `NO DISPONIBLE`. Do not edit or delete `HISTORIAL_ESTADO` rows.
 
 ## Exposed data
 
