@@ -4,14 +4,13 @@
   const freezeList = items => Object.freeze(items.map(item => Object.freeze(item)));
 
   root.SDSO_CONFIG = Object.freeze({
-    version: '0.4.0-stg-auth12j',
-    environment: 'staging',
-    cachePrefix: 'stg-centro-control-sdso-',
-    dbName: 'centro-control-sdso-stg',
-    lastSyncKey: 'sdso:stg:lastSync',
-    // Se configura con el endpoint de Apps Script del libro de staging.
-    // Nunca reutilizar aquí la URL productiva durante el desarrollo.
-    backendUrl: 'https://script.google.com/macros/s/AKfycbxJTs7TKUhHNK5YFAQofouB86GmzlSG9BodXvFjVke93BbyjHDp9TkPrMipU5mkdIU/exec',
+    version: '0.4.0',
+    environment: 'production',
+    cachePrefix: 'centro-control-sdso-',
+    dbName: 'centro-control-sdso',
+    lastSyncKey: 'sdso:lastSync',
+    // Debe apuntar al Web App NUEVO de v0.4 productivo. No reutilizar el backend v0.3.
+    backendUrl: '__PRODUCTION_V04_BACKEND_URL__',
     googleClientId: '392994193626-8sa4j1hngsrttslqdlkkis6gr2fvjbuv.apps.googleusercontent.com',
 
     links: Object.freeze({
