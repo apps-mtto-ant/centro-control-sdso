@@ -10,7 +10,7 @@ Create a staging Apps Script project and set Script Properties:
 - `GOOGLE_CLIENT_ID`: OAuth web client ID used by Google Identity Services in the staging frontend.
 - `ALLOWED_DOMAIN`: Google Workspace domain allowed to consult operational details.
 - `EDITOR_EMAILS`: comma/newline separated addresses allowed to write.
-- `ALLOWED_EMAILS`: required when `ALLOWED_DOMAIN` is `gmail.com`; list the exact Google accounts allowed to consult details. For Workspace domains it is optional and can further restrict readers.
+- `ALLOWED_EMAILS`: required in every mode, including Workspace domains; list the exact Google accounts allowed to consult details. If it is absent or empty, access fails closed.
 
 Set the staging origin as an authorized JavaScript origin in the OAuth client. Set `googleClientId` and the staging deployment URL in the staging copy of `js/config.js` only.
 
