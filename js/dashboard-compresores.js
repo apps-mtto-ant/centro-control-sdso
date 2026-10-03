@@ -252,10 +252,16 @@ async function submitForm(form, method, success) {
     button.disabled=false;
     return;
   }
-  if(!result?.ok){
-    expireOnAuthError(result);
-    msg.textContent=result?.error?.message||'El registro fue rechazado.';
-    delete form.dataset.requestFingerprint;delete form.dataset.requestId;delete form.dataset.uncertainFingerprint;
+  if(result?.ok!==true){
+    const code=String(result?.error?.code||'');
+    if(result?.ok===false&&code&&code!=='INTERNAL_ERROR'){
+      expireOnAuthError(result);
+      msg.textContent=result?.error?.message||'El registro fue rechazado.';
+      delete form.dataset.requestFingerprint;delete form.dataset.requestId;delete form.dataset.uncertainFingerprint;
+    }else{
+      form.dataset.uncertainFingerprint=fingerprint;
+      msg.textContent='La respuesta no confirma si el registro se guardó. No cambies los datos; reintenta con este mismo formulario para verificarlo sin duplicar.';
+    }
     button.disabled=false;
     return;
   }
