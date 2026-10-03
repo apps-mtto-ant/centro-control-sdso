@@ -32,7 +32,8 @@ const tables = {
     ['ACTIVO','TIPO_OBJETO','ESTADO_VALIDACION_SAP','ESTADO_OPERACIONAL','DISPONIBILIDAD','TIPO_NOVEDAD','ESTADO_NOVEDAD','CRITICIDAD'],
     ['SI','EQUIPO','CONFIRMADO','OPERATIVO','DISPONIBLE','FALLA','ABIERTA','BAJA'],
     ['NO','SALA','PENDIENTE SAP','FUERA DE SERVICIO','INDISPONIBLE','MANTENCION','EN SEGUIMIENTO','MEDIA'],
-    ['', 'OTRO','SIN SAP','EN MANTENCION','NO APLICA','OPERACION','CERRADA','ALTA']
+    ['', 'OTRO','SIN SAP','EN MANTENCION','NO APLICA','OPERACION','CERRADA','ALTA'],
+    ['', '', '', 'NO APLICA', 'NO APLICA', '', '', '']
   ]
 };
 
@@ -58,13 +59,14 @@ while(sheets.LECTURAS_HOROMETRO.values.length<1000){const row=Array(10).fill('')
 const props={SPREADSHEET_ID:'staging-id',ENVIRONMENT:'staging',GOOGLE_CLIENT_ID:'client-id',ALLOWED_DOMAIN:'gmail.com',ALLOWED_EMAILS:'editor@gmail.com,reader@gmail.com',EDITOR_EMAILS:'editor@gmail.com'};
 let targetSpreadsheetName='BD_CENTRO_CONTROL_SDSO_STG_v0.4';
 const makeToken=email=>`e30.${Buffer.from(JSON.stringify({aud:'client-id',iss:'https://accounts.google.com',exp:Math.floor(Date.now()/1000)+3600,email})).toString('base64url')}.signature`;
-const EDITOR_TOKEN=makeToken('editor@gmail.com'),READER_TOKEN=makeToken('reader@gmail.com'),OUTSIDER_TOKEN=makeToken('outsider@gmail.com'),BAD_TOKEN='not-a-valid-token-that-is-long-enough-for-prefilter';
+const EDITOR_TOKEN=makeToken('editor@gmail.com'),READER_TOKEN=makeToken('reader@gmail.com'),OUTSIDER_TOKEN=makeToken('outsider@gmail.com'),BAD_TOKEN='not-a-valid-token-that-is-long-enough-for-prefilter',MISMATCH_TOKEN=`e30.${Buffer.from(JSON.stringify({aud:'client-id',iss:'https://accounts.google.com',exp:Math.floor(Date.now()/1000)+3600,email:'editor@gmail.com'})).toString('base64url')}.mismatch`;
 let tokenInfoCalls=0;const tokenCache=new Map();
 function tokenInfo(token){
   if(token===EDITOR_TOKEN)return {email:'editor@gmail.com',aud:'client-id',email_verified:true,iss:'https://accounts.google.com'};
   if(token===READER_TOKEN)return {email:'reader@gmail.com',aud:'client-id',email_verified:true,iss:'https://accounts.google.com'};
   if(token===OUTSIDER_TOKEN)return {email:'outsider@gmail.com',aud:'client-id',email_verified:true,iss:'https://accounts.google.com'};
   if(token===BAD_TOKEN)return {email:'bad@gmail.com',aud:'client-id',email_verified:true,iss:'https://accounts.google.com'};
+  if(token===MISMATCH_TOKEN)return {email:'reader@gmail.com',aud:'client-id',email_verified:true,iss:'https://accounts.google.com'};
   return null;
 }
 const context={
@@ -89,6 +91,7 @@ const publicHealth=body(context.doGet({parameter:{action:'health'}}));
 assert.equal(publicHealth.ok,true);
 assert.equal(publicHealth.data.buildId,'UNSET');
 assert.equal(publicHealth.data.mode,'authenticated-summary-editor-write');
+const propsBeforeWorkspace=Object.keys(props).filter(k=>k.startsWith('TOKENINFO_RATE_')).length,workspaceCalls=tokenInfoCalls;props.ALLOWED_DOMAIN='antucoya.cl';props.ALLOWED_EMAILS='';const workspaceToken=`e30.${Buffer.from(JSON.stringify({aud:'client-id',iss:'https://accounts.google.com',exp:Math.floor(Date.now()/1000)+3600,email:'arbitrary@antucoya.cl',hd:'antucoya.cl'})).toString('base64url')}.workspace`;const workspaceDenied=body(context.doPost({postData:{contents:JSON.stringify({action:'authenticate',idToken:workspaceToken})}}));assert.equal(workspaceDenied.error.code,'AUTH_NOT_CONFIGURED');assert.equal(tokenInfoCalls,workspaceCalls,'workspace domain mode without an explicit allowlist cannot spend Google quota');assert.equal(Object.keys(props).filter(k=>k.startsWith('TOKENINFO_RATE_')).length,propsBeforeWorkspace,'workspace mode without allowlist cannot create per-email properties');props.ALLOWED_DOMAIN='gmail.com';props.ALLOWED_EMAILS='editor@gmail.com,reader@gmail.com';
 const anonymousDashboard=body(context.doGet({parameter:{action:'getDashboardCompresores'}}));
 assert.equal(anonymousDashboard.error.code,'AUTH_REQUIRED');
 const anonymousEquipos=body(context.doGet({parameter:{action:'getEquipos'}}));
@@ -102,6 +105,8 @@ const beforeForged=tokenInfoCalls;for(let i=0;i<31;i++){const r=body(context.doP
 assert.equal(tokenInfoCalls-beforeForged,30,'forged tokens can spend only the claimed authorized identity quota');
 const readerUnaffected=body(context.doPost({postData:{contents:JSON.stringify({action:'authenticate',idToken:READER_TOKEN})}}));assert.equal(readerUnaffected.ok,true,'one identity rate limit does not block other authorized users');
 props['TOKENINFO_RATE_'+context.sha256Hex_('editor@gmail.com')]=undefined;
+const outsiderCalls=tokenInfoCalls,outsiderProps=Object.keys(props).filter(k=>k.startsWith('TOKENINFO_RATE_')).length;const outsiderEarly=body(context.doPost({postData:{contents:JSON.stringify({action:'authenticate',idToken:OUTSIDER_TOKEN})}}));assert.equal(outsiderEarly.error.code,'ACCESS_DENIED');assert.equal(tokenInfoCalls,outsiderCalls,'unlisted claimed address is rejected before Google tokeninfo');assert.equal(Object.keys(props).filter(k=>k.startsWith('TOKENINFO_RATE_')).length,outsiderProps,'unlisted claimed address creates no rate property');
+const mismatch=body(context.doPost({postData:{contents:JSON.stringify({action:'authenticate',idToken:MISMATCH_TOKEN})}}));assert.equal(mismatch.error.code,'ACCESS_DENIED','claimed email must equal verified tokeninfo email');
 const snapshot=body(context.doPost({postData:{contents:JSON.stringify({action:'getDashboardCompresores',idToken:READER_TOKEN})}}));
 assert.equal(snapshot.ok,true);
 assert.equal(snapshot.data.equipos.length,2);
@@ -133,8 +138,11 @@ const status=body(context.doPost({postData:{contents:JSON.stringify({action:'sav
 assert.equal(status.ok,true,'retry completes state after history was written');
 assert.equal(sheets.HISTORIAL_ESTADO.values.filter(r=>r[sheets.HISTORIAL_ESTADO.values[3].indexOf('requestId')]==='state-request-1').length,1,'retry does not duplicate history');
 assert.equal(sheets.HISTORIAL_ESTADO.values[4][sheets.HISTORIAL_ESTADO.values[3].indexOf('requestId')],'state-request-1','state changes append to audit history');
+const conflictState=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'state-request-1',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',estado:'FUERA DE SERVICIO',disponibilidad:'INDISPONIBLE'}})}}));assert.equal(conflictState.error.code,'REQUEST_ID_CONFLICT','state request ID cannot be replayed with different fields');
+const stateA={requestId:'state-concurrent-A',fechaHora:'2026-10-02T11:00:00.000Z',equipoId:'EQ01',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'};const stateB={requestId:'state-concurrent-B',fechaHora:stateA.fechaHora,equipoId:'EQ01',estado:'FUERA DE SERVICIO',disponibilidad:'INDISPONIBLE'};assert.equal(body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:stateA})}})).ok,true);assert.equal(body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:stateB})}})).ok,true);const replayA=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:stateA})}}));assert.equal(replayA.data.superseded,true,'an older successful request stays superseded after a newer same-time event');assert.equal(sheets.ESTADO_ACTUAL.values[4][sheets.ESTADO_ACTUAL.values[3].indexOf('requestId')],'state-concurrent-B','replay cannot restore older equipment state');
 props.ENVIRONMENT='production';const blocked=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:EDITOR_TOKEN,data:{requestId:'blocked-write',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',tipo:'FALLA',criticidad:'ALTA',descripcion:'No debe guardar'}})}}));assert.equal(blocked.error.code,'WRITE_ENVIRONMENT_BLOCKED');props.ENVIRONMENT='staging';
 targetSpreadsheetName='BD_CENTRO_CONTROL_SDSO';const wrongBook=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:EDITOR_TOKEN,data:{requestId:'wrong-book-write',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',tipo:'FALLA',criticidad:'ALTA',descripcion:'No debe guardar'}})}}));assert.equal(wrongBook.error.code,'WRITE_TARGET_BLOCKED');targetSpreadsheetName='BD_CENTRO_CONTROL_SDSO_STG_v0.4';
+const historyHeaders=sheets.HISTORIAL_ESTADO.values[3],historyKeyCol=historyHeaders.indexOf('historialId');historyHeaders[historyKeyCol]='brokenHeader';const headerFailure=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'history-header-fail',fechaHora:'2026-10-02T10:30:00.000Z',equipoId:'EQ02',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'}})}}));assert.equal(headerFailure.error.code,'HEADERS_INVALID');assert.equal(sheets.ESTADO_ACTUAL.values.some(r=>r[sheets.ESTADO_ACTUAL.values[3].indexOf('equipoId')]==='EQ02'),false,'invalid history headers block state creation');historyHeaders[historyKeyCol]='historialId';
 const stale=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'state-request-2',fechaHora:'2026-10-01T10:00:00.000Z',equipoId:'EQ01',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'}})}}));
 assert.equal(stale.error.code,'STALE_STATE_UPDATE');
 const saved=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:EDITOR_TOKEN,data:{requestId:'request-1',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',tipo:'FALLA',criticidad:'ALTA',descripcion:'Prueba operativa'}})}}));
@@ -151,6 +159,7 @@ const closed=body(context.doPost({postData:{contents:JSON.stringify({action:'clo
 assert.equal(closed.ok,true);
 assert.equal(sheets.NOVEDADES.values[4][noveltyHeaders.indexOf('usuario')],'private@example.com','closing keeps original author');
 assert.equal(sheets.NOVEDADES.values[4][noveltyHeaders.indexOf('usuarioCierre')],'editor@gmail.com','closing records the closer separately');
+const legacyData={requestId:'legacy-state',fechaHora:'2026-10-02T12:00:00.000Z',equipoId:'EQ02',estado:'OPERATIVO',disponibilidad:'DISPONIBLE'};assert.equal(body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:legacyData})}})).ok,true);const histReqCol=sheets.HISTORIAL_ESTADO.values[3].indexOf('requestId'),histIdCol=sheets.HISTORIAL_ESTADO.values[3].indexOf('historialId');const legacyHistRow=sheets.HISTORIAL_ESTADO.values.findIndex((r,i)=>i>3&&r[histReqCol]==='legacy-state');assert.ok(legacyHistRow>3);sheets.HISTORIAL_ESTADO.values[legacyHistRow][histIdCol]='';const recoveredLegacy=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:legacyData})}}));assert.equal(recoveredLegacy.ok,true);const recoveredRow=sheets.HISTORIAL_ESTADO.values.find(r=>r[histReqCol]==='legacy-state');assert.equal(recoveredRow[sheets.HISTORIAL_ESTADO.values[3].indexOf('estadoAnterior')],'DESCONOCIDO (RECUPERADO)');assert.equal(body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:legacyData})}})).data.replayed,true);assert.equal(sheets.HISTORIAL_ESTADO.values.filter(r=>r[histReqCol]==='legacy-state').length,1,'legacy history recovery is idempotent');
 const unknown=body(context.doPost({postData:{contents:JSON.stringify({action:'saveNovedad',idToken:EDITOR_TOKEN,data:{requestId:'request-2',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'UNKNOWN',tipo:'FALLA',criticidad:'ALTA',descripcion:'Equipo desconocido'}})}}));
 assert.equal(unknown.error.code,'EQUIPMENT_NOT_ACTIVE');
 const decrease=body(context.doPost({postData:{contents:JSON.stringify({action:'saveHorometro',idToken:EDITOR_TOKEN,data:{requestId:'request-3',fechaHora:'2026-10-02T10:00:00.000Z',equipoId:'EQ01',horometro:509}})}}));
@@ -162,4 +171,5 @@ assert.equal(savedHour.ok,true,'valid hourmeter saves despite unidad filler thro
 assert.equal(sheets.LECTURAS_HOROMETRO.values[6][0],savedHour.data.lecturaId,'first blank lecturaId row is used rather than row 1001');
 assert.equal(sheets.LECTURAS_HOROMETRO.values[999][0],'','filler rows remain untouched');
 const conflict=body(context.doPost({postData:{contents:JSON.stringify({action:'saveHorometro',idToken:EDITOR_TOKEN,data:{requestId:'request-hour-valid',fechaHora:'2026-10-02T13:00:00.000Z',equipoId:'EQ01',horometro:20}})}}));assert.equal(conflict.error.code,'REQUEST_ID_CONFLICT','request IDs cannot silently replay a different payload');
+const invalidNoAplica=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'na-mismatch',fechaHora:'2026-10-02T14:00:00.000Z',equipoId:'EQ02',estado:'NO APLICA',disponibilidad:'INDISPONIBLE'}})}}));assert.equal(invalidNoAplica.error.code,'INCONSISTENT_STATE');assert.equal(sheets.ESTADO_ACTUAL.values.find(r=>r[sheets.ESTADO_ACTUAL.values[3].indexOf('equipoId')]==='EQ02')[sheets.ESTADO_ACTUAL.values[3].indexOf('requestId')],'legacy-state','mismatched NO APLICA pair is rejected without changing state');const validNoAplica=body(context.doPost({postData:{contents:JSON.stringify({action:'saveEstado',idToken:EDITOR_TOKEN,data:{requestId:'na-valid',fechaHora:'2026-10-02T14:01:00.000Z',equipoId:'EQ02',estado:'NO APLICA',disponibilidad:'NO APLICA'}})}}));assert.equal(validNoAplica.ok,true);const naSnapshot=body(context.doPost({postData:{contents:JSON.stringify({action:'getDashboardCompresores',idToken:READER_TOKEN})}}));assert.equal(naSnapshot.data.resumen.noAplica,1,'NO APLICA has its own count');assert.equal(naSnapshot.data.resumen.indisponibles,1,'NO APLICA is excluded from unavailable count');
 console.log('Apps Script smoke: OK (schema, row-key append with unidad filler to row 1000, auth/roles, state, novelty, idempotency, formula safety and hourmeter validation)');

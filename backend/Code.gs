@@ -2,11 +2,10 @@
  * CENTRO DE CONTROL SDSO · Apps Script v0.4.0
  * Fuente v0.4 para despliegue en staging. No instalar sobre el proyecto de producción.
  * Requiere Script Properties: ENVIRONMENT=staging, SPREADSHEET_ID, GOOGLE_CLIENT_ID, ALLOWED_DOMAIN,
- * EDITOR_EMAILS. Para cuentas gmail.com, ALLOWED_EMAILS debe enumerar las
- * cuentas autorizadas, ya que Gmail no entrega un hosted domain de Workspace.
+ * ALLOWED_EMAILS y EDITOR_EMAILS. ALLOWED_EMAILS debe enumerar siempre las cuentas autorizadas;
  * Requiere usar BD_CENTRO_CONTROL_SDSO de staging.
  */
-const API_VERSION = '0.4.0-rc4';
+const API_VERSION = '0.4.0-rc5';
 const TOKENINFO_MAX_PER_MINUTE = 30;
 const SHEETS = Object.freeze({
   MAESTRO: 'MAESTRO_EQUIPOS', ESTADO: 'ESTADO_ACTUAL', HOROMETROS: 'LECTURAS_HOROMETRO',
@@ -96,7 +95,7 @@ function identityHintAllowed_(claims,domain,allowedEmails) {
   const emailDomain=email.split('@').pop();
   if(domain==='gmail.com')return emailDomain==='gmail.com'&&allowedEmails.indexOf(email)>=0;
   const hostedDomain=String(claims.hd||'').toLowerCase();
-  return emailDomain===domain&&hostedDomain===domain&&(!allowedEmails.length||allowedEmails.indexOf(email)>=0);
+  return emailDomain===domain&&hostedDomain===domain&&allowedEmails.indexOf(email)>=0;
 }
 function verifyIdentity_(token) {
   if (!token || String(token).length < 40) throw apiError_('AUTH_REQUIRED','Inicia sesión para continuar.');
@@ -104,7 +103,7 @@ function verifyIdentity_(token) {
   const clientId = props.getProperty('GOOGLE_CLIENT_ID');
   const domain = String(props.getProperty('ALLOWED_DOMAIN') || '').toLowerCase().replace(/^@/,'');
   const allowedEmails = String(props.getProperty('ALLOWED_EMAILS') || '').split(/[\n,;]/).map(x=>x.trim().toLowerCase()).filter(Boolean);
-  if (!clientId || !domain || (domain === 'gmail.com' && !allowedEmails.length)) throw apiError_('AUTH_NOT_CONFIGURED','La autenticación de staging aún no está configurada.');
+  if (!clientId || !domain || !allowedEmails.length) throw apiError_('AUTH_NOT_CONFIGURED','La autenticación de staging aún no está configurada.');
   const claims=cheapJwtClaims_(String(token),clientId);
   if(!identityHintAllowed_(claims,domain,allowedEmails))throw apiError_('ACCESS_DENIED','La cuenta no pertenece al dominio autorizado.');
   const claimedEmail=String(claims.email).trim().toLowerCase();
@@ -118,7 +117,7 @@ function verifyIdentity_(token) {
   const emailDomain = email.split('@').pop();
   const identityAllowed = domain === 'gmail.com'
     ? emailDomain === 'gmail.com' && allowedEmails.indexOf(email) >= 0
-    : emailDomain === domain && hostedDomain === domain && (!allowedEmails.length || allowedEmails.indexOf(email) >= 0);
+    : emailDomain === domain && hostedDomain === domain && allowedEmails.indexOf(email) >= 0;
   if (aud !== clientId || !verified || !email || email!==claimedEmail || !identityAllowed || issuer!=='https://accounts.google.com' && issuer!=='accounts.google.com') {
     throw apiError_('ACCESS_DENIED','La cuenta no pertenece al dominio autorizado.');
   }
@@ -165,10 +164,10 @@ function getDashboard_() {
       novedadesAbiertas:openCounts[id]||0
     };
   });
-  const byArea={},byModel={},sap={};let available=0,unavailable=0,noState=0;
+  const byArea={},byModel={},sap={};let available=0,unavailable=0,noState=0,noAplica=0;
   items.forEach(x=>{
-    const area=x.maestro.areaOperacional||'SIN ÁREA';const a=byArea[area]||(byArea[area]={total:0,disponibles:0,indisponibles:0,sinEstado:0});a.total++;
-    const d=String(x.estadoActual&&x.estadoActual.disponibilidad||'').toUpperCase();if(d==='DISPONIBLE'){available++;a.disponibles++;}else if(d==='INDISPONIBLE'){unavailable++;a.indisponibles++;}else{noState++;a.sinEstado++;}
+    const area=x.maestro.areaOperacional||'SIN ÁREA';const a=byArea[area]||(byArea[area]={total:0,disponibles:0,indisponibles:0,sinEstado:0,noAplica:0});a.total++;
+    const d=String(x.estadoActual&&x.estadoActual.disponibilidad||'').toUpperCase();const operational=String(x.estadoActual&&x.estadoActual.estado||'').toUpperCase();if(d==='DISPONIBLE'){available++;a.disponibles++;}else if(d==='INDISPONIBLE'){unavailable++;a.indisponibles++;}else if(d==='NO APLICA'||operational==='NO APLICA'){noAplica++;a.noAplica++;}else{noState++;a.sinEstado++;}
     const model=normalizeModel_(x.maestro.modelo||'SIN MODELO');byModel[model]=(byModel[model]||0)+1;
     const validation=x.maestro.estadoValidacionSAP||'SIN ESTADO';sap[validation]=(sap[validation]||0)+1;
   });
@@ -181,7 +180,7 @@ function getDashboard_() {
   const inactiveCount=sapRows.filter(m=>String(m.activo||'').toUpperCase()!=='SI').length;
   const modelMismatch=sapRows.filter(m=>m.modelo&&m.modeloSAP&&normalizeModel_(m.modelo)!==normalizeModel_(m.modeloSAP)).map(m=>({equipoId:m.equipoId,modelo:m.modelo,modeloSAP:m.modeloSAP}));
   const sapMaster=sapRows.map(m=>({maestro:{activo:m.activo||'',estadoValidacionSAP:m.estadoValidacionSAP||''}}));
-  return {resumen:{totalEquipos:items.length,disponibles:available,indisponibles:unavailable,sinEstado:noState,novedadesAbiertas:open.length,ultimaActualizacion:dates.length?new Date(Math.max.apply(null,dates)).toISOString():null},porArea:byArea,porModelo:byModel,validacionSAP:sap,equipos:items,listas:lists,conciliacionSAP:{activos:activeMaster.length,inactivos:inactiveCount,sinSAP:activeMaster.filter(m=>!String(m.numeroEquipoSAP||'').trim()).length,duplicadosSAP:duplicates,modeloNoEquivalente:modelMismatch,equipos:sapMaster}};
+  return {resumen:{totalEquipos:items.length,disponibles:available,indisponibles:unavailable,sinEstado:noState,noAplica:noAplica,novedadesAbiertas:open.length,ultimaActualizacion:dates.length?new Date(Math.max.apply(null,dates)).toISOString():null},porArea:byArea,porModelo:byModel,validacionSAP:sap,equipos:items,listas:lists,conciliacionSAP:{activos:activeMaster.length,inactivos:inactiveCount,sinSAP:activeMaster.filter(m=>!String(m.numeroEquipoSAP||'').trim()).length,duplicadosSAP:duplicates,modeloNoEquivalente:modelMismatch,equipos:sapMaster}};
 }
 
 function getEquipos_() {
@@ -203,6 +202,9 @@ function saveEstado_(data,identity) {
   const history=sheet_(SHEETS.HISTORIAL_ESTADO);const historyTable=readObjects_(SHEETS.HISTORIAL_ESTADO);validateHeaders_(SHEETS.HISTORIAL_ESTADO,historyTable.headers,HISTORY_HEADERS);
   const priorHistory=historyTable.rows.find(x=>String(x.requestId||'')===clean.requestId);
   if(priorHistory&&(String(priorHistory.equipoId)!==clean.equipoId||String(priorHistory.estadoNuevo)!==String(data.estado).trim()||String(priorHistory.disponibilidadNueva)!==String(data.disponibilidad).trim()||dateMs_(priorHistory.fechaHoraOperacional)!==dateMs_(clean.fechaHora)))throw apiError_('REQUEST_ID_CONFLICT','El identificador de solicitud ya fue usado con otros datos.');
+  if(priorHistory&&historyTable.rows.some(x=>String(x.equipoId)===clean.equipoId&&x._row>priorHistory._row))return {saved:true,replayed:true,superseded:true};
+  const stateNoAplica=String(data.estado||'').trim().toUpperCase()==='NO APLICA';const availabilityNoAplica=String(data.disponibilidad||'').trim().toUpperCase()==='NO APLICA';
+  if(stateNoAplica!==availabilityNoAplica)throw apiError_('INCONSISTENT_STATE','Si el estado o la disponibilidad es NO APLICA, ambos campos deben quedar en NO APLICA.');
   const hit=table.rows.filter(x=>String(x.equipoId)===clean.equipoId);if(hit.length>1)throw apiError_('DUPLICATE_EQUIPMENT_STATE','ESTADO_ACTUAL contiene más de una fila para este equipo. Corregir duplicados en staging.');
   const existing=hit[0]||{};
   if(existing.requestId===clean.requestId&&priorHistory&&String(existing.estado||'')===String(data.estado).trim()&&String(existing.disponibilidad||'')===String(data.disponibilidad).trim()&&dateMs_(existing.fechaHoraActualizacion)===dateMs_(clean.fechaHora)&&String(existing.subestado||'')===short_(data.subestado,120)&&String(existing.ubicacionActual||'')===short_(data.ubicacionActual,160))return {saved:true,replayed:true};
