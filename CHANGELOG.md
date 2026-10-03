@@ -13,6 +13,7 @@
 - AUTH12 rc6: corregido bloqueo de render del frontend (`querySelectorAll` para controles `data-list`), normalización defensiva de snapshots heredados/caché y versión PWA `0.4.0-stg-auth12c`.
 - AUTH12 rc6: smoke principal actualizada a la matriz cerrada con pruebas conductuales de combinaciones cruzadas, datos heredados y encabezado no clave de `HISTORIAL_ESTADO`.
 - AUTH12 rc7: modelo operacional ampliado a seis estados. Disponibilidad pasa a ser derivada y no editable: `OPERATIVO`/`STAND BY` → `DISPONIBLE`; `FUERA DE SERVICIO`/`OVERHAUL`/`MANTENCION`/`FALLA` → `NO DISPONIBLE`. Backend ignora disponibilidad enviada por el cliente y persiste el valor derivado; `INDISPONIBLE` queda solo como legado normalizado en lectura.
+- Pre-release rc8: backend preparado para producción con `EXPECTED_SPREADSHEET_NAME`, `PRODUCTION_SCHEMA_MIGRATION_ENABLED` y `PRODUCTION_WRITES_ENABLED`; producción queda bloqueada por defecto hasta habilitación explícita.
 - AUTH12 auth12j: corregidos flujo offline/reconexión PWA, ocultamiento de edición y cierre de sesión sin red, conservación segura de identidad visual offline y retorno online sin recarga forzada.
 - AUTH12 resiliencia: timeout HTTP del frontend ampliado de 12 s a 30 s manteniendo reintentos idempotentes con el mismo requestId.
 - AUTH12 smoke: corregida expectativa de conteo legado, agregada verificación de disponibilidad derivada en HISTORIAL_ESTADO y cobertura de legado contradictorio.
