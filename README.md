@@ -93,6 +93,8 @@ Todo release que modifique HTML, CSS, JS, manifest o app shell debe incrementar 
 
 Al tomar control un Service Worker nuevo, la app realiza una única recarga controlada para evitar combinaciones de HTML nuevo con assets HTTP antiguos.
 
+El `googleClientId` no se bloquea automáticamente porque puede compartirse entre staging y producción si ambos orígenes están autorizados en el mismo cliente OAuth; esa decisión debe confirmarse explícitamente en la revisión pre-release.
+
 ## Publicación
 
 Producción:
@@ -114,7 +116,7 @@ https://apps-mtto-ant.github.io/centro-control-sdso-stg/
 3. Pruebas online, offline, actualización PWA y backend.
 4. Correcciones de auditoría.
 5. Revisión final.
-6. Ejecutar `node scripts/pre-release-check.js` después de sustituir toda configuración de staging; el chequeo debe quedar en verde antes del merge.
+6. En el repositorio fuente, ejecutar `node scripts/pre-release-check.js` después de sustituir toda configuración de staging; además, el Pull Request hacia `main` ejecuta este guard automáticamente y debe quedar en verde antes del merge.
 7. Merge controlado de `develop-v0.4 → main` solo después de aprobación.
 8. Validación productiva y tag/release correspondiente.
 
