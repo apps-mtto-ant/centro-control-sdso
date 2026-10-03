@@ -1,9 +1,9 @@
 /**
  * CENTRO DE CONTROL SDSO · Apps Script v0.4.0
- * Fuente v0.4 para despliegue en staging. No instalar sobre el proyecto de producción.
- * Requiere Script Properties: ENVIRONMENT=staging, SPREADSHEET_ID, GOOGLE_CLIENT_ID, ALLOWED_DOMAIN,
- * ALLOWED_EMAILS y EDITOR_EMAILS. ALLOWED_EMAILS debe enumerar siempre las cuentas autorizadas;
- * Requiere usar BD_CENTRO_CONTROL_SDSO de staging.
+ * Fuente v0.4 para despliegues separados de staging y producción.
+ * Requiere Script Properties: ENVIRONMENT, SPREADSHEET_ID, GOOGLE_CLIENT_ID, ALLOWED_DOMAIN,
+ * ALLOWED_EMAILS y EDITOR_EMAILS. ALLOWED_EMAILS debe enumerar siempre las cuentas autorizadas.
+ * Producción exige además EXPECTED_SPREADSHEET_NAME y habilitaciones explícitas para migración/escritura.
  */
 const API_VERSION = '0.4.0-rc7';
 const TOKENINFO_MAX_PER_MINUTE = 30;
@@ -50,7 +50,7 @@ function doPost(e) {
       else {
       requireEditor_(identity);
       data = withScriptLock_(function() {
-          assertStagingTarget_();
+          assertWriteTarget_();
           if (action === 'saveEstado') return saveEstado_(body.data || {}, identity);
           if (action === 'saveHorometro') return saveHorometro_(body.data || {}, identity);
           if (action === 'saveNovedad') return saveNovedad_(body.data || {}, identity);
@@ -306,19 +306,45 @@ function short_(v,max) {const value=String(v||'').trim().slice(0,max);return /^[
 function appendByHeaders_(sh,headers,record) {const row=headers.map(h=>record[h]===undefined?'':record[h]);sh.getRange(nextRow_(sh,HEADER_ROW,headers,primaryKeyForSheet_(sh.getName())),1,1,headers.length).setValues([row]);}
 function nextRow_(sh,headerRow,headers,key) {const index=headers.indexOf(key);if(index<0)throw apiError_('HEADERS_INVALID','No se encontró la columna clave '+key+'.');const first=headerRow+1,max=sh.getMaxRows();const values=max>=first?sh.getRange(first,index+1,max-headerRow,1).getValues():[];for(let i=0;i<values.length;i++)if(values[i][0]===''||values[i][0]===null)return first+i;sh.insertRowsAfter(max,1);return max+1;}
 function sheet_(name) {const ss=spreadsheet_();const sh=ss.getSheetByName(name);if(!sh)throw apiError_('SHEET_NOT_FOUND','No se encontró la hoja '+name+'.');return sh;}
-function spreadsheet_() {const id=PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');if(!id)throw apiError_('SPREADSHEET_NOT_CONFIGURED','Configura SPREADSHEET_ID en las propiedades del script de staging.');return SpreadsheetApp.openById(id);}
-function assertStagingTarget_() {const props=PropertiesService.getScriptProperties();if(String(props.getProperty('ENVIRONMENT')||'').toLowerCase()!=='staging')throw apiError_('WRITE_ENVIRONMENT_BLOCKED','La escritura está bloqueada: configura ENVIRONMENT=staging en el proyecto de prueba.');const name=spreadsheet_().getName();if(!/_STG(?:_|$)/i.test(String(name)))throw apiError_('WRITE_TARGET_BLOCKED','La escritura está bloqueada porque el libro configurado no está identificado como staging.');}
+function spreadsheet_() {const id=PropertiesService.getScriptProperties().getProperty('SPREADSHEET_ID');if(!id)throw apiError_('SPREADSHEET_NOT_CONFIGURED','Configura SPREADSHEET_ID en las propiedades del script.');return SpreadsheetApp.openById(id);}
+function deploymentTarget_() {
+  const props=PropertiesService.getScriptProperties();
+  const environment=String(props.getProperty('ENVIRONMENT')||'').trim().toLowerCase();
+  const spreadsheet=spreadsheet_();
+  const name=String(spreadsheet.getName()||'').trim();
+  if(environment==='staging'){
+    if(!/_STG(?:_|$)/i.test(name))throw apiError_('WRITE_TARGET_BLOCKED','El entorno staging solo puede usar un libro identificado como _STG.');
+    return {environment,name,spreadsheet,props};
+  }
+  if(environment==='production'){
+    if(/_STG(?:_|$)/i.test(name))throw apiError_('WRITE_TARGET_BLOCKED','Producción no puede usar un libro de staging.');
+    const expected=String(props.getProperty('EXPECTED_SPREADSHEET_NAME')||'').trim();
+    if(!expected||name!==expected)throw apiError_('WRITE_TARGET_BLOCKED','El libro productivo no coincide con EXPECTED_SPREADSHEET_NAME.');
+    return {environment,name,spreadsheet,props};
+  }
+  throw apiError_('WRITE_ENVIRONMENT_BLOCKED','ENVIRONMENT debe ser staging o production.');
+}
+function assertWriteTarget_() {
+  const target=deploymentTarget_();
+  if(target.environment==='production'&&String(target.props.getProperty('PRODUCTION_WRITES_ENABLED')||'').toLowerCase()!=='true')throw apiError_('PRODUCTION_WRITE_DISABLED','Las escrituras productivas aún no están habilitadas.');
+  return target;
+}
+function assertSchemaMigrationTarget_() {
+  const target=deploymentTarget_();
+  if(target.environment==='production'&&String(target.props.getProperty('PRODUCTION_SCHEMA_MIGRATION_ENABLED')||'').toLowerCase()!=='true')throw apiError_('PRODUCTION_SCHEMA_MIGRATION_DISABLED','La migración de esquema productiva aún no está habilitada.');
+  return target;
+}
 function apiError_(code,message) {const e=new Error(message);e.code=code;return e;}
 function error_(err) {return {code:err&&err.code?String(err.code):'INTERNAL_ERROR',message:err&&err.message?String(err.message):'Error interno del backend.'};}
 function response_(payload) {return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);}
 
-/** Ejecutar manualmente solo en staging tras configurar ENVIRONMENT=staging y validar SPREADSHEET_ID. */
+/** Ejecutar manualmente solo tras validar propiedades, respaldo y destino del entorno. */
 function prepareV040Schema() {
-  assertStagingTarget_();
-  const ss=spreadsheet_();
+  const target=assertSchemaMigrationTarget_();
+  const ss=target.spreadsheet;
   Object.keys(EXTRA_HEADERS).forEach(name=>{const sh=ss.getSheetByName(name);if(!sh)throw new Error('Falta hoja '+name);const headers=sh.getRange(HEADER_ROW,1,1,sh.getLastColumn()).getDisplayValues()[0].map(String);EXTRA_HEADERS[name].forEach(h=>{if(headers.indexOf(h)<0){sh.getRange(HEADER_ROW,sh.getLastColumn()+1).setValue(h);}});});
   let history=ss.getSheetByName(SHEETS.HISTORIAL_ESTADO);if(!history)history=ss.insertSheet(SHEETS.HISTORIAL_ESTADO);const existing=history.getLastColumn()?history.getRange(HEADER_ROW,1,1,history.getLastColumn()).getDisplayValues()[0].map(x=>String(x).trim()):[];if(existing.filter(Boolean).length===0)history.getRange(HEADER_ROW,1,1,HISTORY_HEADERS.length).setValues([HISTORY_HEADERS]);else validateHeaders_(SHEETS.HISTORIAL_ESTADO,existing,HISTORY_HEADERS);
-  return 'v0.4 staging columns ready';
+  return 'v0.4 '+target.environment+' columns ready';
 }
 
 /** Prueba local/manual de lectura y esquema. No escribe datos operacionales. */
