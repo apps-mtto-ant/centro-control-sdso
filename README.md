@@ -1,8 +1,8 @@
-# Centro de Control SDSO — v0.3
+# Centro de Control SDSO — v0.4 en desarrollo
 
 > La rama `develop-v0.4` contiene la candidata en desarrollo. Lee [docs/V0.4_SCOPE.md](docs/V0.4_SCOPE.md) y [backend/README.md](backend/README.md) antes de conectar recursos de staging. La configuración de v0.4 mantiene `backendUrl` vacío hasta crear el endpoint separado.
 
-Candidata de la etapa v0.3 del Centro de Control web/PWA de Minera Antucoya · Servicios de Soporte a la Operación.
+Candidata v0.4 del Centro de Control web/PWA de Minera Antucoya · Servicios de Soporte a la Operación. Producción permanece en v0.3.0 y no se modifica durante AUTH12.
 
 ## Alcance v0.3
 
@@ -49,7 +49,7 @@ Estado validado al cierre de esta candidata:
 - 6 PENDIENTE SAP
 - 1 ERROR MAESTRO SAP
 
-Los KPIs operacionales permanecen en 0/31 sin estado mientras `ESTADO_ACTUAL` no tenga datos.
+Regla operacional v0.4: solo son válidos `OPERATIVO + DISPONIBLE` y `FUERA DE SERVICIO + INDISPONIBLE`. `NO APLICA` se retiró de estado y disponibilidad. Registros heredados con `NO APLICA` —o cualquier combinación fuera de esa matriz— se proyectan como **Sin estado** hasta registrar un estado real. `HISTORIAL_ESTADO` es inmutable: no se corrigen ni eliminan filas históricas.
 
 ## IndexedDB
 
@@ -98,7 +98,7 @@ https://apps-mtto-ant.github.io/centro-control-sdso-stg/
 
 ## Flujo de liberación
 
-1. Desarrollo en `develop-v0.3`.
+1. Desarrollo en `develop-v0.4`.
 2. Sincronización a staging.
 3. Pruebas online, offline, actualización PWA y backend.
 4. Correcciones de auditoría.
